@@ -1,6 +1,9 @@
 package data
 
-import "fmt"
+import (
+	"fmt"
+	"url_shortner/internal/utils"
+)
 
 type URL struct {
 	Long     string
@@ -9,7 +12,7 @@ type URL struct {
 }
 
 func NewURL(longURL string) *URL {
-	shortURL := shorten(longURL)
+	shortURL := utils.Shorten(longURL)
 	return &URL{
 		Long:     longURL,
 		Short:    shortURL,
@@ -23,7 +26,6 @@ type URLModel struct {
 
 func (model *URLModel) Insert(url *URL) error {
 	model.DB = append(model.DB, url)
-	fmt.Println("models", model.DB)
 	return nil
 }
 

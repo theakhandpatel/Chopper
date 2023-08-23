@@ -1,8 +1,16 @@
 package data
 
 import (
-	"fmt"
+	"database/sql"
+	"errors"
 	"url_shortner/internal/utils"
+
+	"github.com/mattn/go-sqlite3"
+)
+
+var (
+	ErrRecordNotFound = errors.New("record not found")
+	ErrDuplicateEntry = errors.New("Duplicate Entry")
 )
 
 type URL struct {
@@ -21,23 +29,49 @@ func NewURL(longURL string) *URL {
 }
 
 type URLModel struct {
-	DB []*URL
+	DB *sql.DB
 }
 
 func (model *URLModel) Insert(url *URL) error {
-	model.DB = append(model.DB, url)
+	query := `
+		INSERT INTO urls (long_url, short_url, accessed) VALUES (?, ?, ?);
+	`
+	_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed)
+
+	if err != nil {
+		sqliteErr, isSQLError := err.(sqlite3.Error)
+		if isSQLError && sqliteErr.Code == sqlite3.ErrConstraint {
+
+			return ErrDuplicateEntry
+		}
+		return err
+	}
+
 	return nil
 }
 
-func (model *URLModel) Get(shortURL string) *URL {
-	for i, url := range model.DB {
-		if url.Short == shortURL {
-			url.Accessed++
-			fmt.Println("Found", url)
-			return model.DB[i]
-		} else {
-			fmt.Println("urls are", url.Short, shortURL)
+func (model *URLModel) Get(shortURL string) (*URL, error) {
+	query := `
+		SELECT long_url, short_url, accessed FROM urls WHERE short_url = ?;
+	`
+	row := model.DB.QueryRow(query, shortURL)
+
+	url := &URL{}
+	err := row.Scan(&url.Long, &url.Short, &url.Accessed)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
 		}
+		return nil, err
 	}
-	return nil
+
+	_, err = model.DB.Exec(`
+		UPDATE urls SET accessed = accessed + 1 WHERE short_url = ?;
+	`, shortURL)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return url, nil
 }

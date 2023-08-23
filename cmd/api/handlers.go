@@ -24,7 +24,12 @@ func (app *application) shortenURLHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	url := data.NewURL(longURL)
-	app.URL.Insert(url)
+	err := app.URL.Insert(url)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(url)
 }
@@ -32,7 +37,14 @@ func (app *application) shortenURLHandler(w http.ResponseWriter, r *http.Request
 func (app *application) expandURLHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := chi.URLParam(r, "shortURL")
 
-	longURL := app.URL.Get(shortURL).Long
+	url, err := app.URL.Get(shortURL)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		fmt.Println(err)
+		return
+	}
+
+	longURL := url.Long
 	if longURL == "" {
 		http.NotFound(w, r)
 		return
@@ -41,6 +53,6 @@ func (app *application) expandURLHandler(w http.ResponseWriter, r *http.Request)
 	if !strings.HasPrefix(longURL, "http://") && !strings.HasPrefix(longURL, "https://") {
 		longURL = "https://" + longURL
 	}
-
+	fmt.Println(longURL)
 	http.Redirect(w, r, longURL, http.StatusMovedPermanently)
 }

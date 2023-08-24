@@ -7,11 +7,11 @@ This is a URL shortener project written in Golang. The main purpose of this proj
 - Shorten long URLs to shorter, more manageable links.
 - Store mappings of short URLs to their corresponding long URLs.
 - Redirect users to the original long URL when they access a short URL.
+- Analytics of shortURls created
 
 ## Technologies Used
 - Golang programming language
-- Simple in-memory array as the initial database
-- SQLite database (planned for future implementation)
+- SQLite database 
 
 
 ## How It Works
@@ -21,7 +21,7 @@ This is a URL shortener project written in Golang. The main purpose of this proj
 4. When a user accesses a short URL, the application looks up the short key in the database and redirects the user to the original long URL.
 
 ## Future Plans
-Currently, the project uses a simple in-memory array to store mappings between short keys and long URLs. In the future, this will be replaced with an SQLite database for better data persistence.
+Currently, the project uses a simple SQLite to store mappings between short keys and long URLs. In the future, this will be enhanced with REDIS as Cache Layer.
 
 ## Usage
 To run the project:

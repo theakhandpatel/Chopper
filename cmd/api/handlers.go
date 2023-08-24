@@ -23,13 +23,13 @@ func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	url := data.NewURL(longURL)
-	fmt.Println("Handler:", url.Short, url.Long)
+
 	err := app.Model.URL.Insert(url)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-	fmt.Println("Handler2:", url.Short, url.Long)
+
 	app.writeJSON(w, http.StatusCreated, envelope{"url": url})
 }
 
@@ -77,7 +77,7 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		fmt.Println("Analytics insertion error:", err)
 	}
 
-	http.Redirect(w, r, longURL, http.StatusMovedPermanently)
+	http.Redirect(w, r, longURL, app.StatusRedirectType)
 }
 
 func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +86,7 @@ func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "URL parameter is missing", http.StatusBadRequest)
 		return
 	}
+
 	shortCode, err := extractShortcode(shortURL)
 	if err != nil {
 		http.Error(w, "URL is not valid", http.StatusBadRequest)

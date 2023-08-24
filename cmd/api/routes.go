@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 )
 
 func (app *application) routes() http.Handler {
@@ -13,5 +14,5 @@ func (app *application) routes() http.Handler {
 	r.Get("/api/stats", app.AnalyticsHandler)
 	r.Get("/{shortURL}", app.ExpandURLHandler)
 
-	return r
+	return middleware.Logger(r)
 }

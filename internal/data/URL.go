@@ -33,7 +33,7 @@ func NewURL(longURL string) *URL {
 
 type URLModel struct {
 	DB         *sql.DB
-	MaxRetries int
+	MaxRetries int64
 }
 
 func (model *URLModel) Insert(url *URL) error {
@@ -51,8 +51,6 @@ func (model *URLModel) Insert(url *URL) error {
 			fmt.Println(url.Short, url.Long)
 			return nil
 		}
-
-		fmt.Println("Insert:", retriesLeft, url.Short, url.Long)
 
 		sqliteErr, isSQLError := err.(sqlite3.Error)
 		if isSQLError && sqliteErr.Code == sqlite3.ErrConstraint {

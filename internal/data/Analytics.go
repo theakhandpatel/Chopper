@@ -6,12 +6,12 @@ import (
 )
 
 type AnalyticsEntry struct {
-	ID        int64
-	ShortURL  string
-	IP        string
-	UserAgent string
-	Referrer  string
-	Timestamp time.Time
+	ID        int64     `json:"omit"`
+	ShortURL  string    `json:"omit"`
+	IP        string    `json:"ip_address"`
+	UserAgent string    `json:"user-agent"`
+	Referrer  string    `json:"referrer"`
+	Timestamp time.Time `json:"accessed_at"`
 }
 
 type AnalyticsModel struct {

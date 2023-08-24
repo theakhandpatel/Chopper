@@ -7,9 +7,9 @@ type Model struct {
 	Analytics AnalyticsModel
 }
 
-func NewModels(db *sql.DB) Model {
+func NewModels(db *sql.DB, maxCollisionRetries int64) Model {
 	return Model{
-		URL:       URLModel{DB: db, MaxRetries: 5},
+		URL:       URLModel{DB: db, MaxRetries: maxCollisionRetries},
 		Analytics: AnalyticsModel{DB: db},
 	}
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"flag"
+	"fmt"
 	"net/http"
 	"url_shortner/internal/data"
 
@@ -9,20 +11,37 @@ import (
 )
 
 type application struct {
-	Model data.Model
+	Model              data.Model
+	StatusRedirectType int
+	Port               int64
 }
 
 func main() {
 
-	db, err := openDB("./database.db")
+	port := *flag.Int64("port", 8080, "Port number")
+	maxCollisionRetries := *flag.Int64("maxRetry", 5, "Maximum Collision Retries")
+	enableTemporaryRedirect := *flag.Bool("temp-redirect", true, "temporary redirect enabled")
+	dsn := *flag.String("dsn", "./database.db", "path to the SQLite file")
+	flag.Parse()
+
+	db, err := openDB(dsn)
 	if err != nil {
 		panic(err)
 	}
+	statusRedirectType := http.StatusPermanentRedirect
+	if enableTemporaryRedirect {
+		statusRedirectType = http.StatusTemporaryRedirect
+	}
 
 	app := application{
-		Model: data.NewModels(db),
+		Model:              data.NewModels(db, maxCollisionRetries),
+		StatusRedirectType: statusRedirectType,
+		Port:               port,
 	}
-	http.ListenAndServe(":8080", app.routes())
+
+	fmt.Println("Intializing server at :", app.Port)
+	err = http.ListenAndServe(fmt.Sprintf(":%v", app.Port), app.routes())
+	panic(err)
 }
 
 func openDB(dsn string) (*sql.DB, error) {

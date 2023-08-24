@@ -30,6 +30,11 @@ func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Reque
 	http.Error(w, message, http.StatusInternalServerError)
 }
 
+func (app *application) rateLimitExceededResponse(w http.ResponseWriter, r *http.Request) {
+	message := "rate limit exceeded"
+	http.Error(w, message, http.StatusTooManyRequests)
+}
+
 func extractShortcode(url string) (shortcode string, err error) {
 	parts := strings.Split(url, "/")
 	if len(parts) < 4 {

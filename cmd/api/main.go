@@ -10,37 +10,54 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type application struct {
-	Model              data.Model
-	StatusRedirectType int
-	Port               int64
+type config struct {
+	Port    int64
+	limiter struct {
+		rps     float64
+		burst   int
+		enabled bool
+	}
+	StatusRedirectType  int
+	MaxCollisionRetries int64
+	dsn                 string
 }
 
-func main() {
+type application struct {
+	Model  data.Model
+	config config
+}
 
-	port := *flag.Int64("port", 8080, "Port number")
-	maxCollisionRetries := *flag.Int64("maxRetry", 5, "Maximum Collision Retries")
-	enableTemporaryRedirect := *flag.Bool("temp-redirect", true, "temporary redirect enabled")
-	dsn := *flag.String("dsn", "./database.db", "path to the SQLite file")
+// TODO: Implemnet Server Metrics
+func main() {
+	var cfg config
+
+	flag.Int64Var(&cfg.Port, "port", 8080, "Port number")
+	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
+	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
+	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", false, "Enable rate limiter")
+	flag.Int64Var(&cfg.MaxCollisionRetries, "maxRetry", 5, "")
+	flag.StringVar(&cfg.dsn, "dsn", "./database.db", "path to the SQLite file")
+	enableTemporaryRedirect := *flag.Bool("temp-redirect", false, "temporary redirect enabled")
+
 	flag.Parse()
 
-	db, err := openDB(dsn)
+	cfg.StatusRedirectType = http.StatusPermanentRedirect
+	if enableTemporaryRedirect {
+		cfg.StatusRedirectType = http.StatusTemporaryRedirect
+	}
+
+	db, err := openDB(cfg.dsn)
 	if err != nil {
 		panic(err)
 	}
-	statusRedirectType := http.StatusPermanentRedirect
-	if enableTemporaryRedirect {
-		statusRedirectType = http.StatusTemporaryRedirect
-	}
 
 	app := application{
-		Model:              data.NewModels(db, maxCollisionRetries),
-		StatusRedirectType: statusRedirectType,
-		Port:               port,
+		Model:  data.NewModels(db, cfg.MaxCollisionRetries),
+		config: cfg,
 	}
 
-	fmt.Println("Intializing server at :", app.Port)
-	err = http.ListenAndServe(fmt.Sprintf(":%v", app.Port), app.routes())
+	fmt.Println("Intializing server at :", cfg.Port)
+	err = http.ListenAndServe(fmt.Sprintf(":%v", cfg.Port), app.routes())
 	panic(err)
 }
 

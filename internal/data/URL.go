@@ -32,8 +32,8 @@ func NewURL(longURL string) *URL {
 }
 
 type URLModel struct {
-	DB         *sql.DB
-	MaxRetries int64
+	DB                  *sql.DB
+	MaxCollisionRetries int64
 }
 
 func (model *URLModel) Insert(url *URL) error {
@@ -41,7 +41,7 @@ func (model *URLModel) Insert(url *URL) error {
 					INSERT INTO urls (long_url, short_url, accessed) VALUES (?, ?, ?);
 			`
 
-	for retriesLeft := model.MaxRetries; retriesLeft > 0; retriesLeft-- {
+	for retriesLeft := model.MaxCollisionRetries; retriesLeft > 0; retriesLeft-- {
 
 		_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed)
 

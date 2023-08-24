@@ -77,7 +77,7 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		fmt.Println("Analytics insertion error:", err)
 	}
 
-	http.Redirect(w, r, longURL, app.StatusRedirectType)
+	http.Redirect(w, r, longURL, app.config.StatusRedirectType)
 }
 
 func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {

@@ -9,7 +9,7 @@ type Model struct {
 
 func NewModels(db *sql.DB, maxCollisionRetries int64) Model {
 	return Model{
-		URL:       URLModel{DB: db, MaxRetries: maxCollisionRetries},
+		URL:       URLModel{DB: db, MaxCollisionRetries: maxCollisionRetries},
 		Analytics: AnalyticsModel{DB: db},
 	}
 }

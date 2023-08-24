@@ -8,9 +8,10 @@ import (
 
 func (app *application) routes() http.Handler {
 	r := chi.NewRouter()
-	r.Get("/", app.healthCheckHandler)
-	r.Get("/api/shorten", app.shortenURLHandler)
-	r.Get("/{shortURL}", app.expandURLHandler)
+	r.Get("/", app.HealthCheckHandler)
+	r.Get("/api/shorten", app.ShortenURLHandler)
+	r.Get("/api/stats", app.AnalyticsHandler)
+	r.Get("/{shortURL}", app.ExpandURLHandler)
 
 	return r
 }

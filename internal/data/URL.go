@@ -3,6 +3,9 @@ package data
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"strconv"
+	"time"
 	"url_shortner/internal/utils"
 
 	"github.com/mattn/go-sqlite3"
@@ -10,7 +13,7 @@ import (
 
 var (
 	ErrRecordNotFound = errors.New("record not found")
-	ErrDuplicateEntry = errors.New("Duplicate Entry")
+	ErrMaxCollision   = errors.New("collision limit excedded")
 )
 
 type URL struct {
@@ -29,25 +32,48 @@ func NewURL(longURL string) *URL {
 }
 
 type URLModel struct {
-	DB *sql.DB
+	DB         *sql.DB
+	MaxRetries int
 }
 
 func (model *URLModel) Insert(url *URL) error {
 	query := `
-		INSERT INTO urls (long_url, short_url, accessed) VALUES (?, ?, ?);
-	`
-	_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed)
+					INSERT INTO urls (long_url, short_url, accessed) VALUES (?, ?, ?);
+			`
 
-	if err != nil {
+	for retriesLeft := model.MaxRetries; retriesLeft > 0; retriesLeft-- {
+
+		_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed)
+
+		// Successful insertion
+		if err == nil {
+			retriesLeft = 0
+			fmt.Println(url.Short, url.Long)
+			return nil
+		}
+
+		fmt.Println("Insert:", retriesLeft, url.Short, url.Long)
+
 		sqliteErr, isSQLError := err.(sqlite3.Error)
 		if isSQLError && sqliteErr.Code == sqlite3.ErrConstraint {
 
-			return ErrDuplicateEntry
+			existingURL, _ := model.Get(url.Short)
+
+			if existingURL.Long == url.Long {
+				return nil
+			} else {
+				// Handle duplicate entry by modifying the short code
+				timestamp := time.Now().UnixNano() // Using timestamp as a unique identifier
+				url.Short = utils.Shorten(url.Long + strconv.FormatInt(timestamp, 10))
+			}
+
+		} else {
+			return err
 		}
-		return err
+
 	}
 
-	return nil
+	return ErrMaxCollision
 }
 
 func (model *URLModel) Get(shortURL string) (*URL, error) {
@@ -60,18 +86,19 @@ func (model *URLModel) Get(shortURL string) (*URL, error) {
 	err := row.Scan(&url.Long, &url.Short, &url.Accessed)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrRecordNotFound
 		}
 		return nil, err
 	}
 
-	_, err = model.DB.Exec(`
-		UPDATE urls SET accessed = accessed + 1 WHERE short_url = ?;
-	`, shortURL)
-
-	if err != nil {
-		return nil, err
-	}
-
 	return url, nil
+}
+
+func (model *URLModel) UpdateCount(shortURL string) error {
+	query := `
+		UPDATE urls SET accessed = accessed + 1 WHERE short_url = ?;
+	`
+	_, err := model.DB.Exec(query, shortURL)
+
+	return err
 }

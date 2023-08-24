@@ -9,7 +9,7 @@ import (
 )
 
 type application struct {
-	URL *data.URLModel
+	Model data.Model
 }
 
 func main() {
@@ -20,9 +20,7 @@ func main() {
 	}
 
 	app := application{
-		URL: &data.URLModel{
-			DB: db,
-		},
+		Model: data.NewModels(db),
 	}
 	http.ListenAndServe(":8080", app.routes())
 }
@@ -56,6 +54,20 @@ func openDB(dsn string) (*sql.DB, error) {
 	}
 
 	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_long_url ON urls(long_url);`)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS analytics (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			short_url TEXT NOT NULL,
+			ip TEXT NOT NULL,
+			user_agent TEXT NOT NULL,
+			referrer TEXT,
+			timestamp DATETIME NOT NULL
+	);
+	`)
 	if err != nil {
 		return nil, err
 	}

@@ -3,7 +3,6 @@ package data
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 	"url_shortner/internal/utils"
@@ -11,17 +10,23 @@ import (
 	"github.com/mattn/go-sqlite3"
 )
 
-var (
-	ErrRecordNotFound = errors.New("record not found")
-	ErrMaxCollision   = errors.New("collision limit excedded")
-)
+// ErrRecordNotFound is returned when a record is not found in the database.
+var ErrRecordNotFound = errors.New("record not found")
 
+// ErrMaxCollision is returned when the collision limit is exceeded during URL shortening.
+var ErrMaxCollision = errors.New("collision limit exceeded")
+
+// ErrDuplicateEntry is returned when a duplicate entry already exists in the database.
+var ErrDuplicateEntry = errors.New("entry already exists")
+
+// URL represents a shortened URL record.
 type URL struct {
 	Long     string
 	Short    string
 	Accessed int64
 }
 
+// NewURL creates a new URL instance with a shortened version of the provided long URL.
 func NewURL(longURL string) *URL {
 	shortURL := utils.Shorten(longURL)
 	return &URL{
@@ -31,49 +36,43 @@ func NewURL(longURL string) *URL {
 	}
 }
 
+// ReShorten generates a new short URL by appending a timestamp to the long URL and shortening it again.
+func (url *URL) ReShorten() {
+	timestamp := time.Now().UnixNano()
+	url.Short = utils.Shorten(url.Long + strconv.FormatInt(timestamp, 10))
+}
+
+// URLModel represents the database model for URL operations.
 type URLModel struct {
 	DB                  *sql.DB
 	MaxCollisionRetries int64
 }
 
+// Insert inserts a new URL record into the database.
 func (model *URLModel) Insert(url *URL) error {
 	query := `
-					INSERT INTO urls (long_url, short_url, accessed) VALUES (?, ?, ?);
-			`
+		INSERT INTO urls (long_url, short_url, accessed) VALUES (?, ?, ?);
+	`
 
-	for retriesLeft := model.MaxCollisionRetries; retriesLeft > 0; retriesLeft-- {
+	_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed)
 
-		_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed)
-
-		// Successful insertion
-		if err == nil {
-			retriesLeft = 0
-			fmt.Println(url.Short, url.Long)
-			return nil
-		}
-
+	if err != nil {
+		// Check for duplicate entry error and return a predefined error.
 		sqliteErr, isSQLError := err.(sqlite3.Error)
 		if isSQLError && sqliteErr.Code == sqlite3.ErrConstraint {
-
-			existingURL, _ := model.Get(url.Short)
-
-			if existingURL.Long == url.Long {
-				return nil
-			} else {
-				// Handle duplicate entry by modifying the short code
-				timestamp := time.Now().UnixNano() // Using timestamp as a unique identifier
-				url.Short = utils.Shorten(url.Long + strconv.FormatInt(timestamp, 10))
-			}
-
-		} else {
-			return err
+			return ErrDuplicateEntry
 		}
-
+		// Use errors.Is to check for specific error type.
+		if errors.Is(err, sqlite3.ErrConstraint) {
+			return ErrDuplicateEntry
+		}
+		return err
 	}
 
-	return ErrMaxCollision
+	return nil
 }
 
+// Get retrieves a URL record based on the short URL.
 func (model *URLModel) Get(shortURL string) (*URL, error) {
 	query := `
 		SELECT long_url, short_url, accessed FROM urls WHERE short_url = ?;
@@ -92,6 +91,7 @@ func (model *URLModel) Get(shortURL string) (*URL, error) {
 	return url, nil
 }
 
+// UpdateCount updates the access count of a URL record.
 func (model *URLModel) UpdateCount(shortURL string) error {
 	query := `
 		UPDATE urls SET accessed = accessed + 1 WHERE short_url = ?;
@@ -99,4 +99,23 @@ func (model *URLModel) UpdateCount(shortURL string) error {
 	_, err := model.DB.Exec(query, shortURL)
 
 	return err
+}
+
+// GetByLongURL retrieves a URL record based on the long URL.
+func (model *URLModel) GetByLongURL(longURL string) (*URL, error) {
+	query := `
+		SELECT long_url, short_url, accessed FROM urls WHERE long_url = ?;
+	`
+	row := model.DB.QueryRow(query, longURL)
+
+	url := &URL{}
+	err := row.Scan(&url.Long, &url.Short, &url.Accessed)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+
+	return url, nil
 }

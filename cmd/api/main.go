@@ -10,42 +10,46 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// config represents the configuration parameters for the application.
 type config struct {
-	Port    int64
+	Port    int64 // Port number
 	limiter struct {
-		rps     float64
-		burst   int
-		enabled bool
+		rps     float64 // Rate limiter maximum requests per second
+		burst   int     // Rate limiter maximum burst
+		enabled bool    // Enable rate limiter
 	}
-	StatusRedirectType  int
-	MaxCollisionRetries int64
-	dsn                 string
+	StatusRedirectType  int    // HTTP status code for redirects
+	MaxCollisionRetries int64  // Maximum retries for collision resolution
+	dsn                 string // Path to the SQLite database file
 }
 
+// application represents the main application structure.
 type application struct {
-	Model  data.Model
-	config config
+	Model  data.Model // Data model for the application
+	config config     // Application configuration
 }
 
-// TODO: Implemnet Server Metrics
 func main() {
 	var cfg config
 
+	// Parsing command line flags
 	flag.Int64Var(&cfg.Port, "port", 8080, "Port number")
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
 	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", false, "Enable rate limiter")
-	flag.Int64Var(&cfg.MaxCollisionRetries, "maxRetry", 5, "")
-	flag.StringVar(&cfg.dsn, "dsn", "./database.db", "path to the SQLite file")
-	enableTemporaryRedirect := *flag.Bool("temp-redirect", false, "temporary redirect enabled")
+	flag.Int64Var(&cfg.MaxCollisionRetries, "maxRetry", 5, "Maximum collision resolution retries")
+	flag.StringVar(&cfg.dsn, "dsn", "./database.db", "Path to the SQLite file")
+	enableTemporaryRedirect := *flag.Bool("temp-redirect", false, "Temporary redirect enabled")
 
 	flag.Parse()
 
+	// Setting redirect type based on configuration
 	cfg.StatusRedirectType = http.StatusPermanentRedirect
 	if enableTemporaryRedirect {
 		cfg.StatusRedirectType = http.StatusTemporaryRedirect
 	}
 
+	// Initializing the database
 	db, err := openDB(cfg.dsn)
 	if err != nil {
 		panic(err)
@@ -56,11 +60,13 @@ func main() {
 		config: cfg,
 	}
 
-	fmt.Println("Intializing server at :", cfg.Port)
+	// Starting the server
+	fmt.Println("Initializing server at port:", cfg.Port)
 	err = http.ListenAndServe(fmt.Sprintf(":%v", cfg.Port), app.routes())
 	panic(err)
 }
 
+// openDB  initializes the SQLite database.
 func openDB(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
@@ -70,6 +76,7 @@ func openDB(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 
+	// Creating the 'urls' table for storing URL records
 	_, err = db.Exec(`
 	CREATE TABLE IF NOT EXISTS urls (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,6 +91,7 @@ func openDB(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 
+	// Creating indexes for efficient queries
 	_, err = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_short_url ON urls(short_url);`)
 	if err != nil {
 		return nil, err
@@ -94,6 +102,7 @@ func openDB(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 
+	// Creating the 'analytics' table for storing URL analytics data
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS analytics (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,

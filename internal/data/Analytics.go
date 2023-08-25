@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// AnalyticsEntry represents a single entry of analytics data.
 type AnalyticsEntry struct {
 	ID        int64     `json:"omit"`
 	ShortURL  string    `json:"omit"`
@@ -14,10 +15,12 @@ type AnalyticsEntry struct {
 	Timestamp time.Time `json:"accessed_at"`
 }
 
+// AnalyticsModel provides methods to interact with the analytics data in the database.
 type AnalyticsModel struct {
 	DB *sql.DB
 }
 
+// Insert adds a new analytics entry into the database.
 func (model *AnalyticsModel) Insert(entry *AnalyticsEntry) error {
 	query := `
 			INSERT INTO analytics (short_url, ip, user_agent, referrer, timestamp)
@@ -27,6 +30,7 @@ func (model *AnalyticsModel) Insert(entry *AnalyticsEntry) error {
 	return err
 }
 
+// Get retrieves analytics entries for a specific short URL from the database.
 func (model *AnalyticsModel) Get(shortURL string) ([]*AnalyticsEntry, error) {
 	query := `
 			SELECT id, short_url, ip, user_agent, referrer, timestamp

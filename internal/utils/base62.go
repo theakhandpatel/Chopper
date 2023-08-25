@@ -8,6 +8,7 @@ import (
 const alphabet = "123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
 const base = uint64(len(alphabet))
 
+// converts a given number to a Base62 encoded string.
 func EncodeToBase62(num uint64) string {
 	encoded := ""
 	for num > 0 {
@@ -18,6 +19,7 @@ func EncodeToBase62(num uint64) string {
 	return encoded
 }
 
+// converts a Base62 encoded string back to its original number representation.
 func DecodeFromBase62(encoded string) uint64 {
 	decoded := uint64(0)
 	power := len(encoded) - 1

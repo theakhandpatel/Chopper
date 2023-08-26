@@ -1,11 +1,15 @@
 package main
 
 import (
+	"expvar"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/felixge/httpsnoop"
 	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
 )
@@ -73,5 +77,39 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 			}
 		}()
 		next.ServeHTTP(w, r)
+	})
+}
+
+// records metrics for api response
+func (app *application) metrics(next http.Handler) http.Handler {
+	totalRequestsRecieved := expvar.NewInt("total_request_recieved")
+	totalResponsesSent := expvar.NewInt("total_responses_sent")
+	totalProcessingTimeMicroseconds := expvar.NewInt("total_processing_time_μs")
+	totalResponsesSentByStatus := expvar.NewMap("total_responses_sent_by_status")
+	averageResponseTimeMicroSeconds := expvar.NewInt("average_processing_time_μs")
+	minResponseTimeMicroSeconds := expvar.NewFloat("minimum_processing_time_μs")
+	maxResponseTimeMicroSeconds := expvar.NewFloat("maximum_processing_time_μs")
+
+	minResponseTimeMicroSeconds.Set(math.MaxFloat64)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if r.URL.Path == "/debug/vars" {
+			next.ServeHTTP(w, r) // Forward the request directly
+			return
+		}
+
+		totalRequestsRecieved.Add(1)
+		metrics := httpsnoop.CaptureMetrics(next, w, r)
+
+		responseTime := metrics.Duration.Microseconds()
+
+		totalResponsesSent.Add(1)
+		totalProcessingTimeMicroseconds.Add(responseTime)
+		averageResponseTimeMicroSeconds.Set(totalProcessingTimeMicroseconds.Value() / totalResponsesSent.Value())
+		minResponseTimeMicroSeconds.Set(math.Min(float64(minResponseTimeMicroSeconds.Value()), float64(responseTime)))
+		maxResponseTimeMicroSeconds.Set(math.Max(float64(maxResponseTimeMicroSeconds.Value()), float64(responseTime)))
+		totalResponsesSentByStatus.Add(strconv.Itoa(metrics.Code), 1)
+
 	})
 }

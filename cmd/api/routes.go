@@ -1,6 +1,7 @@
 package main
 
 import (
+	"expvar"
 	"net/http"
 
 	"github.com/go-chi/chi"
@@ -15,7 +16,8 @@ func (app *application) routes() http.Handler {
 	r.Get("/api/shorten", app.rateLimit(app.ShortenURLHandler))
 	r.Get("/api/stats", app.AnalyticsHandler)
 	r.Get("/{shortURL}", app.ExpandURLHandler)
+	r.Get("/debug/vars", expvar.Handler().ServeHTTP)
 
 	// Apply middleware for logging and error recovery
-	return app.recoverPanic(middleware.Logger(r))
+	return app.metrics(app.recoverPanic(middleware.Logger(r)))
 }

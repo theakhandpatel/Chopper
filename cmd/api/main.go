@@ -56,7 +56,7 @@ func main() {
 	}
 
 	app := application{
-		Model:  data.NewModels(db, cfg.MaxCollisionRetries),
+		Model:  data.NewModel(db, cfg.MaxCollisionRetries),
 		config: cfg,
 	}
 
@@ -113,6 +113,33 @@ func openDB(dsn string) (*sql.DB, error) {
 			timestamp DATETIME NOT NULL
 	);
 	`)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash BLOB NOT NULL,
+    activated INTEGER NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1
+	);
+	`)
+
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS tokens (
+			hash BLOB PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+			expiry TIMESTAMP NOT NULL,
+			scope TEXT NOT NULL
+	);
+	`)
+
 	if err != nil {
 		return nil, err
 	}

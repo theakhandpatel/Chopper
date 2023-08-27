@@ -2,12 +2,11 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 	"url_shortner/internal/data"
+	"url_shortner/internal/validator"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
 )
 
@@ -18,28 +17,41 @@ func (app *application) HealthCheckHandler(w http.ResponseWriter, r *http.Reques
 
 // URL shortening requests.
 func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
-	longURL := r.URL.Query().Get("URL")
 
-	// Validate and process the provided long URL.
-	if longURL == "" || !govalidator.IsURL(longURL) {
-		http.Error(w, "Provide a Valid URL", http.StatusBadRequest)
+	var input inputURL
+	err := app.readJSON(w, r, &input)
+
+	if err != nil {
+		app.badRequestResponse(w, r, err)
 		return
 	}
 
-	// if the URL already exists in the database.
-	existingURL, err := app.Model.URL.GetByLongURL(longURL)
-	if err != nil && err != data.ErrRecordNotFound {
-		app.serverErrorResponse(w, r, err)
+	v := validator.New()
+	ValidateInput(v, &input)
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	if existingURL != nil && existingURL.Long == longURL {
-		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
-		return
+	var url *data.URL
+
+	//If no custom code is required
+	if input.ShortURL == "" {
+		// if the URL already exists in the database.
+		existingURL, err := app.Model.URL.GetByLongURL(input.LongURL)
+		if err != nil && err != data.ErrRecordNotFound {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		if existingURL != nil && existingURL.Long == input.LongURL {
+			app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
+			return
+		}
 	}
 
-	// Generate a new URL and handle collisions.
-	url := data.NewURL(longURL)
+	url = data.NewURL(input.LongURL, input.ShortURL)
+
 	urlInserted := false
 
 	for retriesLeft := app.config.MaxCollisionRetries; retriesLeft > 0; retriesLeft-- {
@@ -76,25 +88,24 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		switch {
 
 		case errors.Is(err, data.ErrRecordNotFound):
-			http.NotFound(w, r)
+			app.NotFoundResponse(w, r)
 		default:
 			app.serverErrorResponse(w, r, err)
 		}
-
 		return
 	}
 
 	// Redirect to the long URL.
 	longURL := url.Long
 	if longURL == "" {
-		http.NotFound(w, r)
+		app.NotFoundResponse(w, r)
 		return
 	}
 
 	// Update access count and record analytics.
 	err = app.Model.URL.UpdateCount(shortURL)
 	if err != nil {
-		fmt.Println(err)
+		app.logResponse(r, err)
 	}
 
 	analyticsEntry := data.AnalyticsEntry{
@@ -107,7 +118,7 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 
 	err = app.Model.Analytics.Insert(&analyticsEntry)
 	if err != nil {
-		fmt.Println("Analytics insertion error:", err)
+		app.logResponse(r, err)
 	}
 
 	http.Redirect(w, r, longURL, app.config.StatusRedirectType)
@@ -117,13 +128,13 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := r.URL.Query().Get("URL")
 	if shortURL == "" {
-		http.Error(w, "URL parameter is missing", http.StatusBadRequest)
+		app.badRequestResponse(w, r, errors.New("url parameter is missing"))
 		return
 	}
 
 	shortCode, err := extractShortcode(shortURL)
 	if err != nil {
-		http.Error(w, "URL is not valid", http.StatusBadRequest)
+		app.NotFoundResponse(w, r)
 		return
 	}
 

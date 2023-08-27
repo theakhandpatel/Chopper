@@ -27,8 +27,10 @@ type URL struct {
 }
 
 // NewURL creates a new URL instance with a shortened version of the provided long URL.
-func NewURL(longURL string) *URL {
-	shortURL := utils.Shorten(longURL)
+func NewURL(longURL string, shortURL string) *URL {
+	if shortURL == "" {
+		shortURL = utils.Shorten(longURL)
+	}
 	return &URL{
 		Long:     longURL,
 		Short:    shortURL,

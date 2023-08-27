@@ -2,15 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"url_shortner/internal/validator"
+
+	"github.com/asaskevich/govalidator"
 )
 
 // A generic map structure to package response.
 type envelope map[string]interface{}
 
-// writeJSON writes the provided data as JSON to the response writer with the specified status code.
+// writes the provided data as JSON to the response writer with the specified status code.
 func (app *application) writeJSON(w http.ResponseWriter, statusCode int, data envelope) error {
 	js, err := json.MarshalIndent(data, "", "\t")
 	if err != nil {
@@ -26,17 +31,56 @@ func (app *application) writeJSON(w http.ResponseWriter, statusCode int, data en
 	return nil
 }
 
-// serverErrorResponse sends a JSON-encoded error response with a generic error message and status code.
-func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
-	fmt.Println("Error:", r.Method, r.URL.String(), "  : ", err)
-	message := "the server encountered a problem and could not process your request"
-	http.Error(w, message, http.StatusInternalServerError)
-}
+// reads response data into the specified variable
+func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+	maxBytes := 1_048_576
+	r.Body = http.MaxBytesReader(w, r.Body, int64(maxBytes))
 
-// rateLimitExceededResponse sends a JSON-encoded response indicating that the rate limit has been exceeded.
-func (app *application) rateLimitExceededResponse(w http.ResponseWriter, r *http.Request) {
-	message := "rate limit exceeded"
-	http.Error(w, message, http.StatusTooManyRequests)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	err := dec.Decode(dst)
+	if err != nil {
+		var syntaxError *json.SyntaxError
+		var unmarshalTypeError *json.UnmarshalTypeError
+		var invalidUnmarshalError *json.InvalidUnmarshalError
+
+		switch {
+
+		case errors.As(err, &syntaxError):
+			return fmt.Errorf("body contains badly-formed JSON (at character %d) ", syntaxError.Offset)
+
+		case errors.Is(err, io.ErrUnexpectedEOF):
+			return errors.New("body contains badly-formed JSON")
+
+		case errors.As(err, &unmarshalTypeError):
+			if unmarshalTypeError.Field != "" {
+				return fmt.Errorf("body contains incorrect JSON type for field %q", unmarshalTypeError.Field)
+			}
+			return fmt.Errorf("body contains incorrect JSON type (at character %d)", unmarshalTypeError.Offset)
+
+		case errors.Is(err, io.EOF):
+			return errors.New("body must not be empty")
+
+		case strings.HasPrefix(err.Error(), "json: unknown field "):
+			fieldName := strings.TrimPrefix(err.Error(), "json: unknown field ")
+			return fmt.Errorf("body contains unknown key %s", fieldName)
+
+		case err.Error() == "http: request body too large":
+			return fmt.Errorf("body must not be larger than %d bytes", maxBytes)
+
+		case errors.As(err, &invalidUnmarshalError):
+			panic(err)
+
+		default:
+			return err
+		}
+	}
+
+	err = dec.Decode(&struct{}{})
+	if err != io.EOF {
+		return errors.New("body must only contain a single JSON value")
+	}
+	return nil
 }
 
 // extractShortcode extracts the shortcode from the given URL.
@@ -47,4 +91,19 @@ func extractShortcode(url string) (shortcode string, err error) {
 	}
 	shortcode = parts[3]
 	return shortcode, nil
+}
+
+type inputURL struct {
+	LongURL  string `json:"long"`
+	ShortURL string `json:"short"`
+}
+
+func ValidateInput(v *validator.Validator, input *inputURL) {
+	v.Check(input.LongURL != "", "long", "cannot be empty")
+	v.Check(govalidator.IsURL(input.LongURL), "long", "must be valid url")
+
+	if input.ShortURL != "" {
+		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 4 chars")
+		v.Check(v.Matches(input.ShortURL, validator.ShortCodeRX), "short", "should containe characters from a-z,A-Z, 0-9")
+	}
 }

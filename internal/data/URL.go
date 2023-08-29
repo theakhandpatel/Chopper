@@ -109,11 +109,11 @@ func (model *URLModel) UpdateCount(shortURL string) error {
 }
 
 // GetByLongURL retrieves a URL record based on the long URL.
-func (model *URLModel) GetByLongURL(longURL string) (*URL, error) {
+func (model *URLModel) GetByLongURL(longURL string, redirectType int) (*URL, error) {
 	query := `
-		SELECT long_url, short_url, accessed, redirect FROM urls WHERE long_url = ?;
+		SELECT long_url, short_url, accessed, redirect FROM urls WHERE long_url = ? AND redirect=?;
 	`
-	row := model.DB.QueryRow(query, longURL)
+	row := model.DB.QueryRow(query, longURL, redirectType)
 
 	url := &URL{}
 	err := row.Scan(&url.Long, &url.Short, &url.Accessed, &url.Redirect)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -34,39 +35,103 @@ func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	user := app.getUserFromContext(r)
+	if user == data.AnonymousUser {
+		app.AnonymousShortenURLHandler(w, r, &input)
+	} else {
+		app.AuthenticatedShortenURLHandler(w, r, &input)
+	}
+
+	// var url *data.URL
+
+	// //If no custom code is required
+	// if input.ShortURL == "" {
+	// 	// if the URL already exists in the database.
+	// 	existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL)
+	// 	if err != nil && err != data.ErrRecordNotFound {
+	// 		app.serverErrorResponse(w, r, err)
+	// 		return
+	// 	}
+
+	// 	if existingURL != nil && existingURL.Long == input.LongURL {
+	// 		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
+	// 		return
+	// 	}
+	// }
+
+	// if user == data.AnonymousUser && (input.ShortURL != "" || input.Redirect != "temporary") {
+	// 	app.authenticationRequiredResponse(w, r)
+	// 	app.logResponse(r, errors.New("not authorized"))
+	// 	return
+	// }
+
+	// redirectType := http.StatusTemporaryRedirect
+	// if input.Redirect == "permanent" {
+	// 	redirectType = http.StatusPermanentRedirect
+	// }
+
+	// maxTriesForInsertion := 3
+	// if input.ShortURL != "" {
+	// 	maxTriesForInsertion = 1
+	// }
+	// url = data.NewURL(input.LongURL, input.ShortURL, redirectType)
+
+	// urlInserted := false
+
+	// for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
+	// 	err := app.Model.URLS.Insert(url)
+	// 	if err == nil {
+	// 		urlInserted = true
+	// 		break
+	// 	}
+
+	// 	if err != data.ErrDuplicateEntry {
+	// 		app.serverErrorResponse(w, r, err)
+	// 		return
+	// 	}
+
+	// 	if err == data.ErrDuplicateEntry {
+	// 		url.ReShorten() //  modify the short code
+	// 	}
+	// }
+
+	// if !urlInserted {
+	// 	app.serverErrorResponse(w, r, err)
+	// 	return
+	// }
+
+	// app.writeJSON(w, http.StatusCreated, envelope{"url": url})
+}
+
+func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r *http.Request, input *inputURL) {
+
 	var url *data.URL
 
+	redirectType := http.StatusPermanentRedirect
+	if input.Redirect == "temporary" {
+		redirectType = http.StatusTemporaryRedirect
+	}
 	//If no custom code is required
 	if input.ShortURL == "" {
-		// if the URL already exists in the database.
-		existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL)
+
+		existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, redirectType)
+
 		if err != nil && err != data.ErrRecordNotFound {
 			app.serverErrorResponse(w, r, err)
 			return
 		}
 
-		if existingURL != nil && existingURL.Long == input.LongURL {
+		if existingURL != nil && redirectType == existingURL.Redirect {
 			app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
 			return
 		}
 	}
 
-	user := app.getUserFromContext(r)
-	if user == data.AnonymousUser && (input.ShortURL != "" || input.Redirect != "temporary") {
-		app.authenticationRequiredResponse(w, r)
-		app.logResponse(r, errors.New("not authorized"))
-		return
-	}
-
-	redirectType := http.StatusTemporaryRedirect
-	if input.Redirect == "permanent" {
-		redirectType = http.StatusPermanentRedirect
-	}
-
-	maxTriesForInsertion := 3
+	maxTriesForInsertion := 5
 	if input.ShortURL != "" {
 		maxTriesForInsertion = 1
 	}
+
 	url = data.NewURL(input.LongURL, input.ShortURL, redirectType)
 
 	urlInserted := false
@@ -89,7 +154,52 @@ func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	if !urlInserted {
+		app.serverErrorResponse(w, r, data.ErrMaxCollision)
+		return
+	}
+
+	app.writeJSON(w, http.StatusCreated, envelope{"url": url})
+}
+
+func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *http.Request, input *inputURL) {
+	var url *data.URL
+
+	// if the URL already exists in the database.
+	existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, http.StatusTemporaryRedirect)
+	if err != nil && err != data.ErrRecordNotFound {
 		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	if existingURL != nil && existingURL.Long == input.LongURL {
+		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
+		return
+	}
+
+	maxTriesForInsertion := 3
+	url = data.NewURL(input.LongURL, "", http.StatusPermanentRedirect)
+
+	urlInserted := false
+
+	for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
+		err := app.Model.URLS.Insert(url)
+		if err == nil {
+			urlInserted = true
+			break
+		}
+
+		if err != data.ErrDuplicateEntry {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		if err == data.ErrDuplicateEntry {
+			url.ReShorten() //  modify the short code
+		}
+	}
+
+	if !urlInserted {
+		app.serverErrorResponse(w, r, data.ErrMaxCollision)
 		return
 	}
 

@@ -7,8 +7,8 @@ import (
 
 // AnalyticsEntry represents a single entry of analytics data.
 type AnalyticsEntry struct {
-	ID        int64     `json:"omit"`
-	ShortURL  string    `json:"omit"`
+	ID        int64     `json:"-"`
+	ShortURL  string    `json:"-"`
 	IP        string    `json:"ip_address"`
 	UserAgent string    `json:"user-agent"`
 	Referrer  string    `json:"referrer"`
@@ -30,8 +30,8 @@ func (model *AnalyticsModel) Insert(entry *AnalyticsEntry) error {
 	return err
 }
 
-// Get retrieves analytics entries for a specific short URL from the database.
-func (model *AnalyticsModel) Get(shortURL string) ([]*AnalyticsEntry, error) {
+// GetAll retrieves analytics entries for a specific short URL from the database.
+func (model *AnalyticsModel) GetAll(shortURL string) ([]*AnalyticsEntry, error) {
 	query := `
 			SELECT id, short_url, ip, user_agent, referrer, timestamp
 			FROM analytics

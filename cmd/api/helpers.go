@@ -103,7 +103,7 @@ func ValidateInput(v *validator.Validator, input *inputURL) {
 	v.Check(govalidator.IsURL(input.LongURL), "long", "must be valid url")
 
 	if input.ShortURL != "" {
-		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 4 chars")
+		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 3 chars")
 		v.Check(v.Matches(input.ShortURL, validator.ShortCodeRX), "short", "should containe characters from a-z,A-Z, 0-9")
 	}
 }

@@ -1,13 +1,17 @@
 package main
 
 import (
+	"errors"
 	"expvar"
 	"fmt"
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+	"url_shortner/internal/data"
+	"url_shortner/internal/validator"
 
 	"github.com/felixge/httpsnoop"
 	"github.com/tomasen/realip"
@@ -111,5 +115,59 @@ func (app *application) metrics(next http.Handler) http.Handler {
 		maxResponseTimeMicroSeconds.Set(math.Max(float64(maxResponseTimeMicroSeconds.Value()), float64(responseTime)))
 		totalResponsesSentByStatus.Add(strconv.Itoa(metrics.Code), 1)
 
+	})
+}
+
+func (app *application) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Vary", "Authorization")
+		authorizationHeader := r.Header.Get("Authorization")
+
+		if authorizationHeader == "" {
+			r = app.setUserInContext(r, data.AnonymousUser)
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		headerParts := strings.Split(authorizationHeader, " ")
+		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
+			app.invalidAuthenticationTokenResponse(w, r)
+			return
+		}
+
+		token := headerParts[1]
+		v := validator.New()
+		data.ValidateTokenPlainText(v, token)
+		if !v.Valid() {
+			app.invalidAuthenticationTokenResponse(w, r)
+			return
+		}
+
+		user, err := app.Model.Users.GetForToken(data.ScopeAuthentication, token)
+		if err != nil {
+			switch {
+			case errors.Is(err, data.ErrRecordNotFound):
+				app.invalidAuthenticationTokenResponse(w, r)
+			default:
+				app.serverErrorResponse(w, r, err)
+			}
+			return
+		}
+
+		r = app.setUserInContext(r, user)
+		r = app.setAuthTokenPlaintextInContext(r, token)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := app.getUserFromContext(r)
+		if user.IsAnonymous() {
+			app.authenticationRequiredResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }

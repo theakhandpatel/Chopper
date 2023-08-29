@@ -51,6 +51,13 @@ func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	user := app.getUserFromContext(r)
+	if user == data.AnonymousUser && input.ShortURL != "" {
+		app.authenticationRequiredResponse(w, r)
+		app.logResponse(r, errors.New("not authorized"))
+		return
+	}
+
 	url = data.NewURL(input.LongURL, input.ShortURL)
 
 	urlInserted := false
@@ -139,7 +146,7 @@ func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	analytics, err := app.Model.Analytics.Get(shortCode)
+	analytics, err := app.Model.Analytics.GetAll(shortCode)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
@@ -198,10 +205,12 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request) {
+
 	var input struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
+
 	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.badRequestResponse(w, r, err)
@@ -253,16 +262,14 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// TODO: Implement Logout
 func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request) {
+	tokenPlaintext := app.getAuthTokenPlaintextFromContext(r)
 
-	var input struct {
-		Token string `json:"token"`
+	if tokenPlaintext == "" {
+		app.authenticationRequiredResponse(w, r)
 	}
 
-	app.readJSON(w, r, &input)
-
-	err := app.Model.Tokens.DeleteOneForUser(input.Token)
+	err := app.Model.Tokens.DeleteOneForUser(tokenPlaintext)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

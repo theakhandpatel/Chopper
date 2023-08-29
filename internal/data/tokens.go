@@ -13,6 +13,8 @@ const (
 	ScopeAuthentication = "authentication"
 )
 
+var EmptyToken = &Token{}
+
 type Token struct {
 	Plaintext string    `json:"token"`
 	Hash      []byte    `json:"-"`

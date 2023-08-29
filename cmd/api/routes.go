@@ -18,9 +18,9 @@ func (app *application) routes() http.Handler {
 	r.Get("/api/stats", app.AnalyticsHandler)
 	r.Get("/{shortURL}", app.ExpandURLHandler)
 	r.Post("/api/signup", app.registerUserHandler)
-	r.Post("/api/login", app.loginUserHandler)
-	r.Post("/api/logout", app.logoutUserHandler)
+	r.Post("/api/signin", app.loginUserHandler)
+	r.Post("/api/signout", app.requireAuthenticatedUser(app.logoutUserHandler))
 
 	// Apply middleware for logging and error recovery
-	return app.metrics(app.recoverPanic(middleware.Logger(r)))
+	return app.metrics(middleware.Logger(app.recoverPanic(app.authenticate(r))))
 }

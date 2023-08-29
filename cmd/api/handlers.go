@@ -52,17 +52,26 @@ func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	user := app.getUserFromContext(r)
-	if user == data.AnonymousUser && input.ShortURL != "" {
+	if user == data.AnonymousUser && (input.ShortURL != "" || input.Redirect != "temporary") {
 		app.authenticationRequiredResponse(w, r)
 		app.logResponse(r, errors.New("not authorized"))
 		return
 	}
 
-	url = data.NewURL(input.LongURL, input.ShortURL)
+	redirectType := http.StatusTemporaryRedirect
+	if input.Redirect == "permanent" {
+		redirectType = http.StatusPermanentRedirect
+	}
+
+	maxTriesForInsertion := 3
+	if input.ShortURL != "" {
+		maxTriesForInsertion = 1
+	}
+	url = data.NewURL(input.LongURL, input.ShortURL, redirectType)
 
 	urlInserted := false
 
-	for retriesLeft := app.config.MaxCollisionRetries; retriesLeft > 0; retriesLeft-- {
+	for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
 		err := app.Model.URLS.Insert(url)
 		if err == nil {
 			urlInserted = true
@@ -129,7 +138,7 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		app.logResponse(r, err)
 	}
 
-	http.Redirect(w, r, longURL, app.config.StatusRedirectType)
+	http.Redirect(w, r, longURL, http.StatusPermanentRedirect)
 }
 
 // analytics for a given short URL.

@@ -9,9 +9,9 @@ type Model struct {
 	Users     UserModel
 }
 
-func NewModel(db *sql.DB, maxCollisionRetries int64) Model {
+func NewModel(db *sql.DB) Model {
 	return Model{
-		URLS:      URLModel{DB: db, MaxCollisionRetries: maxCollisionRetries},
+		URLS:      URLModel{DB: db},
 		Analytics: AnalyticsModel{DB: db},
 		Tokens:    TokenModel{DB: db},
 		Users:     UserModel{DB: db},

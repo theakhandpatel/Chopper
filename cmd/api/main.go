@@ -18,9 +18,7 @@ type config struct {
 		burst   int     // Rate limiter maximum burst
 		enabled bool    // Enable rate limiter
 	}
-	StatusRedirectType  int    // HTTP status code for redirects
-	MaxCollisionRetries int64  // Maximum retries for collision resolution
-	dsn                 string // Path to the SQLite database file
+	dsn string // Path to the SQLite database file
 }
 
 // application represents the main application structure.
@@ -37,17 +35,9 @@ func main() {
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
 	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", false, "Enable rate limiter")
-	flag.Int64Var(&cfg.MaxCollisionRetries, "maxRetry", 5, "Maximum collision resolution retries")
 	flag.StringVar(&cfg.dsn, "dsn", "./database.db", "Path to the SQLite file")
-	enableTemporaryRedirect := *flag.Bool("temp-redirect", false, "Temporary redirect enabled")
 
 	flag.Parse()
-
-	// Setting redirect type based on configuration
-	cfg.StatusRedirectType = http.StatusPermanentRedirect
-	if enableTemporaryRedirect {
-		cfg.StatusRedirectType = http.StatusTemporaryRedirect
-	}
 
 	// Initializing the database
 	db, err := openDB(cfg.dsn)
@@ -56,7 +46,7 @@ func main() {
 	}
 
 	app := application{
-		Model:  data.NewModel(db, cfg.MaxCollisionRetries),
+		Model:  data.NewModel(db),
 		config: cfg,
 	}
 

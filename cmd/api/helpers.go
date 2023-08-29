@@ -96,6 +96,7 @@ func extractShortcode(url string) (shortcode string, err error) {
 type inputURL struct {
 	LongURL  string `json:"long"`
 	ShortURL string `json:"short"`
+	Redirect string `json:"redirect"`
 }
 
 func ValidateInput(v *validator.Validator, input *inputURL) {
@@ -105,5 +106,9 @@ func ValidateInput(v *validator.Validator, input *inputURL) {
 	if input.ShortURL != "" {
 		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 3 chars")
 		v.Check(v.Matches(input.ShortURL, validator.ShortCodeRX), "short", "should containe characters from a-z,A-Z, 0-9")
+	}
+
+	if input.Redirect != "" {
+		v.Check(input.Redirect == "permanent" || input.Redirect == "temporary", "redirect", "must be either 'permanent' or  'temporary'")
 	}
 }

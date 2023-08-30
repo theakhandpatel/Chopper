@@ -14,6 +14,7 @@ import (
 	"url_shortner/internal/validator"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/go-chi/httprate"
 	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
 )
@@ -162,12 +163,110 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 
 func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := app.getUserFromContext(r)
-		if user.IsAnonymous() {
+		if !app.isAuthenticated(r) {
 			app.authenticationRequiredResponse(w, r)
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
 
+func (app *application) shortenRatelimiter(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var keyFunc httprate.KeyFunc
+		var rateLimit int
+		var rateDuration time.Duration
+
+		if app.isAuthenticated(r) {
+			fmt.Println("yasss")
+			// If authenticated, limit by user ID
+			user := app.getUserFromContext(r)
+			keyFunc = func(r *http.Request) (string, error) {
+				return strconv.FormatInt(user.ID, 10), nil
+			}
+			rateLimit = 1
+			rateDuration = 24 * time.Hour
+		} else {
+			fmt.Println("no")
+			keyFunc = httprate.KeyByIP
+			rateLimit = 2
+			rateDuration = 24 * time.Hour
+		}
+
+		// Apply httprate.Limit middleware
+		rateLimiter := httprate.Limit(rateLimit, rateDuration, httprate.WithKeyFuncs(keyFunc), httprate.WithLimitHandler(app.rateLimitExceededResponse))
+
+		rateLimiter(next).ServeHTTP(w, r)
+	}
+}
+
+func (app *application) rateLimitForShortner(next http.HandlerFunc) http.HandlerFunc {
+	type client struct {
+		limiter  *rate.Limiter
+		lastSeen time.Time
+	}
+
+	var (
+		mu      sync.Mutex
+		clients = make(map[any]*client)
+	)
+
+	// Periodically clean up the clients map to remove stale entries.
+	go func() {
+		for {
+			time.Sleep(time.Minute)
+			mu.Lock()
+			for ip, client := range clients {
+				if time.Since(client.lastSeen) > 48*time.Hour {
+					delete(clients, ip)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only carry out the rate limiting check if it's enabled in the application configuration.
+		if !app.isAuthenticated(r) {
+			ip := realip.FromRequest(r)
+
+			mu.Lock()
+			if _, found := clients[ip]; !found {
+				clients[ip] = &client{
+					limiter: rate.NewLimiter(rate.Limit(24*time.Hour), 3),
+				}
+			}
+			clients[ip].lastSeen = time.Now()
+			fmt.Println("for the ip", ip, "this is the limit", clients[ip].limiter.Tokens())
+			// Check if the client's request rate exceeds the rate limit.
+			if !clients[ip].limiter.Allow() {
+				mu.Unlock()
+				app.rateLimitExceededResponse(w, r)
+				return
+			}
+			mu.Unlock()
+		} else {
+
+			user := app.getUserFromContext(r)
+
+			mu.Lock()
+			if _, found := clients[user.ID]; !found {
+				clients[user.ID] = &client{
+					limiter: rate.NewLimiter(rate.Limit(24*time.Hour), 10),
+				}
+			}
+			clients[user.ID].lastSeen = time.Now()
+
+			// Check if the client's request rate exceeds the rate limit.
+			if !clients[user.ID].limiter.Allow() {
+				mu.Unlock()
+				app.rateLimitExceededResponse(w, r)
+				return
+			}
+			mu.Unlock()
+		}
+
+		// If rate limiting is not triggered, pass the request to the next handler.
 		next.ServeHTTP(w, r)
 	})
 }

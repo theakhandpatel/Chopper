@@ -13,4 +13,9 @@ require (
 
 require github.com/felixge/httpsnoop v1.0.3
 
-require golang.org/x/crypto v0.12.0 // indirect
+require golang.org/x/crypto v0.12.0
+
+require (
+	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/go-chi/httprate v0.7.4 // indirect
+)

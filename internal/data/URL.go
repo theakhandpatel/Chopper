@@ -26,10 +26,11 @@ type URL struct {
 	Short    string
 	Accessed int64
 	Redirect int
+	UserID   int64 `json:"-"`
 }
 
 // NewURL creates a new URL instance with a shortened version of the provided long URL.
-func NewURL(longURL string, shortURL string, redirect int) *URL {
+func NewURL(longURL string, shortURL string, redirect int, userID int64) *URL {
 	if shortURL == "" {
 		shortURL = utils.Shorten(longURL)
 	}
@@ -41,6 +42,7 @@ func NewURL(longURL string, shortURL string, redirect int) *URL {
 		Short:    shortURL,
 		Accessed: 0,
 		Redirect: redirect,
+		UserID:   int64(userID),
 	}
 }
 
@@ -58,10 +60,10 @@ type URLModel struct {
 // Insert inserts a new URL record into the database.
 func (model *URLModel) Insert(url *URL) error {
 	query := `
-		INSERT INTO urls (long_url, short_url, accessed, redirect) VALUES (?, ?, ?,?);
+		INSERT INTO urls (long_url, short_url, accessed, redirect, user_id) VALUES (?, ?, ?,?,?);
 	`
 
-	_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed, url.Redirect)
+	_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed, url.Redirect, url.UserID)
 
 	if err != nil {
 		// Check for duplicate entry error and return a predefined error.
@@ -82,12 +84,12 @@ func (model *URLModel) Insert(url *URL) error {
 // Get retrieves a URL record based on the short URL.
 func (model *URLModel) Get(shortURL string) (*URL, error) {
 	query := `
-		SELECT long_url, short_url, accessed, redirect FROM urls WHERE short_url = ?;
+		SELECT long_url, short_url, accessed, redirect, user_id FROM urls WHERE short_url = ?;
 	`
 	row := model.DB.QueryRow(query, shortURL)
 
 	url := &URL{}
-	err := row.Scan(&url.Long, &url.Short, &url.Accessed, &url.Redirect)
+	err := row.Scan(&url.Long, &url.Short, &url.Accessed, &url.Redirect, &url.UserID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound
@@ -109,13 +111,15 @@ func (model *URLModel) UpdateCount(shortURL string) error {
 }
 
 // GetByLongURL retrieves a URL record based on the long URL.
-func (model *URLModel) GetByLongURL(longURL string, redirectType int) (*URL, error) {
+func (model *URLModel) GetByLongURL(longURL string, redirectType int, userID int64) (*URL, error) {
 	query := `
-		SELECT long_url, short_url, accessed, redirect FROM urls WHERE long_url = ? AND redirect=?;
+		SELECT long_url, short_url, accessed, redirect FROM urls WHERE long_url = ? AND redirect=? AND user_id = ?;
 	`
-	row := model.DB.QueryRow(query, longURL, redirectType)
+	row := model.DB.QueryRow(query, longURL, redirectType, userID)
 
-	url := &URL{}
+	url := &URL{
+		UserID: userID,
+	}
 	err := row.Scan(&url.Long, &url.Short, &url.Accessed, &url.Redirect)
 	if err != nil {
 		if err == sql.ErrNoRows {

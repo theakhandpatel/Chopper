@@ -2,15 +2,35 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
 	"time"
 	"url_shortner/internal/data"
 	"url_shortner/internal/validator"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
 )
+
+type inputURL struct {
+	LongURL  string `json:"long"`
+	ShortURL string `json:"short"`
+	Redirect string `json:"redirect"`
+	UserID   int64  `json:"-"`
+}
+
+func ValidateInput(v *validator.Validator, input *inputURL) {
+	v.Check(input.LongURL != "", "long", "cannot be empty")
+	v.Check(govalidator.IsURL(input.LongURL), "long", "must be valid url")
+
+	if input.ShortURL != "" {
+		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 3 chars")
+		v.Check(v.Matches(input.ShortURL, validator.ShortCodeRX), "short", "should containe characters from a-z,A-Z, 0-9")
+	}
+
+	if input.Redirect != "" {
+		v.Check(input.Redirect == "permanent" || input.Redirect == "temporary", "redirect", "must be either 'permanent' or  'temporary'")
+	}
+}
 
 // health check message.
 func (app *application) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
@@ -36,71 +56,12 @@ func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	user := app.getUserFromContext(r)
+	input.UserID = user.ID
 	if user == data.AnonymousUser {
 		app.AnonymousShortenURLHandler(w, r, &input)
 	} else {
 		app.AuthenticatedShortenURLHandler(w, r, &input)
 	}
-
-	// var url *data.URL
-
-	// //If no custom code is required
-	// if input.ShortURL == "" {
-	// 	// if the URL already exists in the database.
-	// 	existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL)
-	// 	if err != nil && err != data.ErrRecordNotFound {
-	// 		app.serverErrorResponse(w, r, err)
-	// 		return
-	// 	}
-
-	// 	if existingURL != nil && existingURL.Long == input.LongURL {
-	// 		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
-	// 		return
-	// 	}
-	// }
-
-	// if user == data.AnonymousUser && (input.ShortURL != "" || input.Redirect != "temporary") {
-	// 	app.authenticationRequiredResponse(w, r)
-	// 	app.logResponse(r, errors.New("not authorized"))
-	// 	return
-	// }
-
-	// redirectType := http.StatusTemporaryRedirect
-	// if input.Redirect == "permanent" {
-	// 	redirectType = http.StatusPermanentRedirect
-	// }
-
-	// maxTriesForInsertion := 3
-	// if input.ShortURL != "" {
-	// 	maxTriesForInsertion = 1
-	// }
-	// url = data.NewURL(input.LongURL, input.ShortURL, redirectType)
-
-	// urlInserted := false
-
-	// for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
-	// 	err := app.Model.URLS.Insert(url)
-	// 	if err == nil {
-	// 		urlInserted = true
-	// 		break
-	// 	}
-
-	// 	if err != data.ErrDuplicateEntry {
-	// 		app.serverErrorResponse(w, r, err)
-	// 		return
-	// 	}
-
-	// 	if err == data.ErrDuplicateEntry {
-	// 		url.ReShorten() //  modify the short code
-	// 	}
-	// }
-
-	// if !urlInserted {
-	// 	app.serverErrorResponse(w, r, err)
-	// 	return
-	// }
-
-	// app.writeJSON(w, http.StatusCreated, envelope{"url": url})
 }
 
 func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r *http.Request, input *inputURL) {
@@ -114,25 +75,27 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 	//If no custom code is required
 	if input.ShortURL == "" {
 
-		existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, redirectType)
+		existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, redirectType, input.UserID)
 
 		if err != nil && err != data.ErrRecordNotFound {
 			app.serverErrorResponse(w, r, err)
 			return
 		}
 
-		if existingURL != nil && redirectType == existingURL.Redirect {
-			app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
-			return
+		if existingURL != nil {
+			if redirectType == existingURL.Redirect || input.Redirect == "" {
+				app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
+				return
+			}
 		}
 	}
 
-	maxTriesForInsertion := 5
-	if input.ShortURL != "" {
+	maxTriesForInsertion := 3
+	if input.ShortURL != "" || input.Redirect != "" {
 		maxTriesForInsertion = 1
 	}
 
-	url = data.NewURL(input.LongURL, input.ShortURL, redirectType)
+	url = data.NewURL(input.LongURL, input.ShortURL, redirectType, input.UserID)
 
 	urlInserted := false
 
@@ -165,19 +128,19 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 	var url *data.URL
 
 	// if the URL already exists in the database.
-	existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, http.StatusTemporaryRedirect)
+	existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, http.StatusTemporaryRedirect, input.UserID)
 	if err != nil && err != data.ErrRecordNotFound {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	if existingURL != nil && existingURL.Long == input.LongURL {
+	if existingURL != nil {
 		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
 		return
 	}
 
 	maxTriesForInsertion := 3
-	url = data.NewURL(input.LongURL, "", http.StatusPermanentRedirect)
+	url = data.NewURL(input.LongURL, "", http.StatusPermanentRedirect, input.UserID)
 
 	urlInserted := false
 
@@ -248,7 +211,7 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		app.logResponse(r, err)
 	}
 
-	http.Redirect(w, r, longURL, http.StatusPermanentRedirect)
+	http.Redirect(w, r, longURL, url.Redirect)
 }
 
 // analytics for a given short URL.
@@ -271,127 +234,4 @@ func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	app.writeJSON(w, http.StatusOK, envelope{"short_url": shortURL, "analytics": analytics})
-}
-
-func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	err := app.readJSON(w, r, &input)
-	if err != nil {
-		app.badRequestResponse(w, r, err)
-		return
-	}
-
-	user := &data.User{
-		Name:      input.Name,
-		Email:     strings.ToLower(input.Email),
-		Activated: false,
-	}
-
-	err = user.Password.Set(input.Password)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	v := validator.New()
-	data.ValidateUser(v, user)
-
-	if !v.Valid() {
-		app.failedValidationResponse(w, r, v.Errors)
-		return
-	}
-
-	err = app.Model.Users.Insert(user)
-	if err != nil {
-		switch {
-		case errors.Is(err, data.ErrDuplicateEmail):
-			v.AddError("email", "A user with this email address already exists")
-			app.failedValidationResponse(w, r, v.Errors)
-		default:
-			app.serverErrorResponse(w, r, err)
-		}
-		return
-	}
-
-	err = app.writeJSON(w, http.StatusAccepted, envelope{"user": user})
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-	}
-}
-
-func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request) {
-
-	var input struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-
-	err := app.readJSON(w, r, &input)
-	if err != nil {
-		app.badRequestResponse(w, r, err)
-		return
-	}
-
-	input.Email = strings.ToLower(input.Email)
-	v := validator.New()
-	data.ValidateEmail(v, input.Email)
-	data.ValidatePasswordPlaintext(v, input.Password)
-
-	if !v.Valid() {
-		app.failedValidationResponse(w, r, v.Errors)
-		return
-	}
-
-	user, err := app.Model.Users.GetByEmail(input.Email)
-	if err != nil {
-		switch {
-		case errors.Is(err, data.ErrRecordNotFound):
-			app.invalidCredentialsResponse(w, r)
-		default:
-			app.serverErrorResponse(w, r, err)
-		}
-		return
-	}
-
-	match, err := user.Password.Matches(input.Password)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	if !match {
-		app.invalidCredentialsResponse(w, r)
-		return
-	}
-
-	token, err := app.Model.Tokens.New(user.ID, 24*time.Hour, data.ScopeAuthentication)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	err = app.writeJSON(w, http.StatusCreated, envelope{"authentication_token": token})
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-}
-
-func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request) {
-	tokenPlaintext := app.getAuthTokenPlaintextFromContext(r)
-
-	if tokenPlaintext == "" {
-		app.authenticationRequiredResponse(w, r)
-	}
-
-	err := app.Model.Tokens.DeleteOneForUser(tokenPlaintext)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-	app.writeJSON(w, http.StatusOK, envelope{"message": "logged out"})
 }

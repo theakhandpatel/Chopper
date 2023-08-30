@@ -34,7 +34,7 @@ func main() {
 	flag.Int64Var(&cfg.Port, "port", 8080, "Port number")
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
-	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", false, "Enable rate limiter")
+	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
 	flag.StringVar(&cfg.dsn, "dsn", "./database.db", "Path to the SQLite file")
 
 	flag.Parse()

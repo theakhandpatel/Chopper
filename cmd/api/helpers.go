@@ -7,9 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"url_shortner/internal/validator"
-
-	"github.com/asaskevich/govalidator"
 )
 
 // A generic map structure to package response.
@@ -83,6 +80,11 @@ func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst int
 	return nil
 }
 
+func (app *application) isAuthenticated(r *http.Request) bool {
+	user := app.getUserFromContext(r)
+	return !user.IsAnonymous()
+}
+
 // extractShortcode extracts the shortcode from the given URL.
 func extractShortcode(url string) (shortcode string, err error) {
 	parts := strings.Split(url, "/")
@@ -91,24 +93,4 @@ func extractShortcode(url string) (shortcode string, err error) {
 	}
 	shortcode = parts[3]
 	return shortcode, nil
-}
-
-type inputURL struct {
-	LongURL  string `json:"long"`
-	ShortURL string `json:"short"`
-	Redirect string `json:"redirect"`
-}
-
-func ValidateInput(v *validator.Validator, input *inputURL) {
-	v.Check(input.LongURL != "", "long", "cannot be empty")
-	v.Check(govalidator.IsURL(input.LongURL), "long", "must be valid url")
-
-	if input.ShortURL != "" {
-		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 3 chars")
-		v.Check(v.Matches(input.ShortURL, validator.ShortCodeRX), "short", "should containe characters from a-z,A-Z, 0-9")
-	}
-
-	if input.Redirect != "" {
-		v.Check(input.Redirect == "permanent" || input.Redirect == "temporary", "redirect", "must be either 'permanent' or  'temporary'")
-	}
 }

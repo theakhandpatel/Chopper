@@ -14,7 +14,6 @@ import (
 	"url_shortner/internal/validator"
 
 	"github.com/felixge/httpsnoop"
-	"github.com/go-chi/httprate"
 	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
 )
@@ -171,35 +170,6 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 	})
 }
 
-func (app *application) shortenRatelimiter(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var keyFunc httprate.KeyFunc
-		var rateLimit int
-		var rateDuration time.Duration
-
-		if app.isAuthenticated(r) {
-			fmt.Println("yasss")
-			// If authenticated, limit by user ID
-			user := app.getUserFromContext(r)
-			keyFunc = func(r *http.Request) (string, error) {
-				return strconv.FormatInt(user.ID, 10), nil
-			}
-			rateLimit = 1
-			rateDuration = 24 * time.Hour
-		} else {
-			fmt.Println("no")
-			keyFunc = httprate.KeyByIP
-			rateLimit = 2
-			rateDuration = 24 * time.Hour
-		}
-
-		// Apply httprate.Limit middleware
-		rateLimiter := httprate.Limit(rateLimit, rateDuration, httprate.WithKeyFuncs(keyFunc), httprate.WithLimitHandler(app.rateLimitExceededResponse))
-
-		rateLimiter(next).ServeHTTP(w, r)
-	}
-}
-
 func (app *application) rateLimitForShortner(next http.HandlerFunc) http.HandlerFunc {
 	type client struct {
 		limiter  *rate.Limiter
@@ -208,7 +178,7 @@ func (app *application) rateLimitForShortner(next http.HandlerFunc) http.Handler
 
 	var (
 		mu      sync.Mutex
-		clients = make(map[any]*client)
+		clients = make(map[string]*client)
 	)
 
 	// Periodically clean up the clients map to remove stale entries.
@@ -233,7 +203,7 @@ func (app *application) rateLimitForShortner(next http.HandlerFunc) http.Handler
 			mu.Lock()
 			if _, found := clients[ip]; !found {
 				clients[ip] = &client{
-					limiter: rate.NewLimiter(rate.Limit(24*time.Hour), 3),
+					limiter: rate.NewLimiter(rate.Limit(3.0/24.0/60.0/60.0), 3),
 				}
 			}
 			clients[ip].lastSeen = time.Now()
@@ -248,17 +218,18 @@ func (app *application) rateLimitForShortner(next http.HandlerFunc) http.Handler
 		} else {
 
 			user := app.getUserFromContext(r)
+			userID := strconv.FormatInt(user.ID, 10)
 
 			mu.Lock()
-			if _, found := clients[user.ID]; !found {
-				clients[user.ID] = &client{
-					limiter: rate.NewLimiter(rate.Limit(24*time.Hour), 10),
+			if _, found := clients[userID]; !found {
+				clients[userID] = &client{
+					limiter: rate.NewLimiter(rate.Limit(10.0/24.0/60.0/60.0), 10),
 				}
 			}
-			clients[user.ID].lastSeen = time.Now()
+			clients[userID].lastSeen = time.Now()
 
 			// Check if the client's request rate exceeds the rate limit.
-			if !clients[user.ID].limiter.Allow() {
+			if !clients[userID].limiter.Allow() {
 				mu.Unlock()
 				app.rateLimitExceededResponse(w, r)
 				return

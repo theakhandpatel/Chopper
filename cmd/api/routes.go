@@ -16,12 +16,12 @@ func (app *application) routes() http.Handler {
 	r.Get("/", app.HealthCheckHandler)
 
 	r.Post("/api/shorten", app.rateLimitForShortner(app.ShortenURLHandler))
-	r.Get("/api/stats", app.rateLimitForShortner(app.AnalyticsHandler))
-	r.Get("/{shortURL}", app.rateLimit(app.ExpandURLHandler))
+	r.Get("/api/stats", app.AnalyticsHandler)
 	r.Post("/api/signup", app.registerUserHandler)
 	r.Post("/api/signin", app.loginUserHandler)
 	r.Post("/api/signout", app.requireAuthenticatedUser(app.logoutUserHandler))
 
+	r.Get("/{shortURL}", app.rateLimit(app.ExpandURLHandler))
 	// Apply middleware for logging and error recovery
 	return app.metrics(middleware.Logger(app.recoverPanic(app.authenticate(r))))
 }

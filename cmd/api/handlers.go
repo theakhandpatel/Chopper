@@ -128,7 +128,7 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 	var url *data.URL
 
 	// if the URL already exists in the database.
-	existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, http.StatusTemporaryRedirect, input.UserID)
+	existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, http.StatusPermanentRedirect, input.UserID)
 	if err != nil && err != data.ErrRecordNotFound {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -192,8 +192,8 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Update access count and record analytics.
-	err = app.Model.URLS.UpdateCount(shortURL)
+	url.Modified = time.Now()
+	err = app.Model.URLS.Update(url)
 	if err != nil {
 		app.logResponse(r, err)
 	}

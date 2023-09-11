@@ -3,7 +3,6 @@ package data
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -28,8 +27,8 @@ type URL struct {
 	Short    string
 	Accessed int64
 	Redirect int
-	UserID   int64 `json:"-"`
-	Created  time.Time
+	UserID   int64     `json:"-"`
+	Created  time.Time `json:"-"`
 	Modified time.Time
 }
 
@@ -46,6 +45,8 @@ func NewURL(longURL string, shortURL string, redirect int, userID int64) *URL {
 		Short:    shortURL,
 		Accessed: 0,
 		Redirect: redirect,
+		Created:  time.Now(),
+		Modified: time.Now(),
 		UserID:   int64(userID),
 	}
 }
@@ -53,6 +54,8 @@ func NewURL(longURL string, shortURL string, redirect int, userID int64) *URL {
 // ReShorten generates a new short URL by appending a timestamp to the long URL and shortening it again.
 func (url *URL) ReShorten() {
 	timestamp := time.Now().UnixNano()
+	url.Created = time.Now()
+	url.Modified = url.Created
 	url.Short = utils.Shorten(url.Long + strconv.FormatInt(timestamp, 10))
 }
 
@@ -64,10 +67,10 @@ type URLModel struct {
 // Insert inserts a new URL record into the database.
 func (model *URLModel) Insert(url *URL) error {
 	query := `
-		INSERT INTO urls (long_url, short_url, accessed, redirect, user_id) VALUES (?, ?, ?,?,?);
+		INSERT INTO urls (long_url, short_url, accessed, redirect, user_id, created, modified) VALUES (?, ?, ?,?,?,?,?);
 	`
 
-	res, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed, url.Redirect, url.UserID)
+	res, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed, url.Redirect, url.UserID, url.Created, url.Modified)
 
 	if err != nil {
 		// Check for duplicate entry error and return a predefined error.
@@ -94,14 +97,14 @@ func (model *URLModel) Insert(url *URL) error {
 // Get retrieves a URL record based on the short URL.
 func (model *URLModel) Get(shortURL string) (*URL, error) {
 	query := `
-		SELECT id, long_url, accessed, redirect, user_id FROM urls WHERE short_url = ?;
+		SELECT id, long_url, accessed, redirect, user_id, created, modified FROM urls WHERE short_url = ?;
 	`
 	row := model.DB.QueryRow(query, shortURL)
 
 	url := &URL{
 		Short: shortURL,
 	}
-	err := row.Scan(&url.ID, &url.Long, &url.Accessed, &url.Redirect, &url.UserID)
+	err := row.Scan(&url.ID, &url.Long, &url.Accessed, &url.Redirect, &url.UserID, &url.Created, &url.Modified)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound
@@ -126,11 +129,11 @@ func (model *URLModel) UpdateCount(shortURL string) error {
 func (model *URLModel) Update(url *URL) error {
 	query := `
 		UPDATE urls
-		SET long_url = ?, short_url = ?, accessed = ?, redirect = ?, user_id = ?, created = ?, modified = ?
+		SET long_url = ?, short_url = ?, accessed = ?, redirect = ?, user_id = ?, modified = ?
 		WHERE id = ?;
 	`
 
-	_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed, url.Redirect, url.UserID, url.Created, url.Modified, url.ID)
+	_, err := model.DB.Exec(query, url.Long, url.Short, url.Accessed, url.Redirect, url.UserID, url.Modified, url.ID)
 	if err != nil {
 		return err
 	}
@@ -141,14 +144,14 @@ func (model *URLModel) Update(url *URL) error {
 // GetByLongURL retrieves a URL record based on the long URL.
 func (model *URLModel) GetByLongURL(longURL string, redirectType int, userID int64) (*URL, error) {
 	query := `
-		SELECT id, long_url, short_url, accessed, redirect FROM urls WHERE long_url = ? AND redirect=? AND user_id = ?;
+		SELECT id, long_url, short_url, accessed, redirect, created, modified FROM urls WHERE long_url = ? AND redirect=? AND user_id = ?;
 	`
 	row := model.DB.QueryRow(query, longURL, redirectType, userID)
 
 	url := &URL{
 		UserID: userID,
 	}
-	err := row.Scan(&url.ID, &url.Long, &url.Short, &url.Accessed, &url.Redirect)
+	err := row.Scan(&url.ID, &url.Long, &url.Short, &url.Accessed, &url.Redirect, &url.Created, &url.Modified)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound

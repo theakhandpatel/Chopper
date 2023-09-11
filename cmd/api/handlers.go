@@ -84,6 +84,8 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 
 		if existingURL != nil {
 			if redirectType == existingURL.Redirect || input.Redirect == "" {
+				existingURL.Modified = time.Now()
+				app.Model.URLS.Update(existingURL)
 				app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
 				return
 			}
@@ -135,6 +137,8 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 	}
 
 	if existingURL != nil {
+		existingURL.Modified = time.Now()
+		app.Model.URLS.Update(existingURL)
 		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
 		return
 	}
@@ -185,17 +189,17 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Redirect to the long URL.
 	longURL := url.Long
 	if longURL == "" {
 		app.NotFoundResponse(w, r)
 		return
 	}
 
-	url.Modified = time.Now()
-	err = app.Model.URLS.Update(url)
-	if err != nil {
-		app.logResponse(r, err)
+	currentTime := time.Now()
+	expiryTime := url.Modified.Add(6 * time.Hour)
+	if expiryTime.Before(currentTime) {
+		app.expiredLinkResponse(w, r)
+		return
 	}
 
 	analyticsEntry := data.AnalyticsEntry{

@@ -23,10 +23,15 @@ type User struct {
 	Email     string    `json:"email"`
 	Password  password  `json:"-"`
 	Activated bool      `json:"activated"`
+	Type      int       `json:"type"`
 }
 
 func (u *User) IsAnonymous() bool {
 	return u == AnonymousUser
+}
+
+func (u *User) IsPremium() bool {
+	return u.Type == 2
 }
 
 type password struct {
@@ -87,8 +92,8 @@ type UserModel struct {
 
 func (m UserModel) Insert(user *User) error {
 	query := `
-	INSERT INTO users (name,email,password_hash,activated) 
-	VALUES (?,?,?,?)
+	INSERT INTO users (name,email,password_hash,activated, type) 
+	VALUES (?,?,?,?,1)
 	`
 	args := []interface{}{user.Name, user.Email, user.Password.hash, user.Activated}
 
@@ -135,6 +140,22 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 	}
 
 	return &user, nil
+}
+
+func (m UserModel) SetUserType(userID int64, userType int) error {
+	query := `
+			UPDATE users
+			SET type = ?
+			WHERE id = ?
+	`
+	args := []interface{}{userType, userID}
+
+	_, err := m.DB.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {

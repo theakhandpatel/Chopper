@@ -131,3 +131,16 @@ func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request
 	}
 	app.writeJSON(w, http.StatusOK, envelope{"message": "logged out"})
 }
+
+func (app *application) registerPremiumHandler(w http.ResponseWriter, r *http.Request) {
+	user := app.getUserFromContext(r)
+	if user.Type == 1 {
+		err := app.Model.Users.SetUserType(user.ID, 2)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"message": "You are premium user"})
+}

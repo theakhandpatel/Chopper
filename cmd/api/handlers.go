@@ -93,7 +93,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 	}
 
 	maxTriesForInsertion := 3
-	if input.ShortURL != "" || input.Redirect != "" {
+	if input.ShortURL != "" {
 		maxTriesForInsertion = 1
 	}
 
@@ -202,17 +202,20 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	analyticsEntry := data.AnalyticsEntry{
-		ShortURL:  shortURL,
-		IP:        r.RemoteAddr,
-		UserAgent: r.UserAgent(),
-		Referrer:  r.Referer(),
-		Timestamp: time.Now(),
-	}
+	if url.UserID != data.AnonymousUser.ID {
+		analyticsEntry := data.AnalyticsEntry{
+			ShortURL:  shortURL,
+			IP:        r.RemoteAddr,
+			UserAgent: r.UserAgent(),
+			Referrer:  r.Referer(),
+			Timestamp: time.Now(),
+			UserID:    url.UserID,
+		}
 
-	err = app.Model.Analytics.Insert(&analyticsEntry)
-	if err != nil {
-		app.logResponse(r, err)
+		err = app.Model.Analytics.Insert(&analyticsEntry)
+		if err != nil {
+			app.logResponse(r, err)
+		}
 	}
 
 	http.Redirect(w, r, longURL, url.Redirect)
@@ -231,10 +234,11 @@ func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request)
 		app.NotFoundResponse(w, r)
 		return
 	}
-
-	analytics, err := app.Model.Analytics.GetAll(shortCode)
+	user := app.getUserFromContext(r)
+	analytics, err := app.Model.Analytics.GetAll(shortCode, user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
+		return
 	}
 
 	app.writeJSON(w, http.StatusOK, envelope{"short_url": shortURL, "analytics": analytics})

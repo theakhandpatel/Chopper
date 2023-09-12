@@ -219,7 +219,10 @@ func (app *application) rateLimitForShortner(next http.HandlerFunc) http.Handler
 
 			user := app.getUserFromContext(r)
 			userID := strconv.FormatInt(user.ID, 10)
-
+			if user.Type == 2 {
+				next.ServeHTTP(w, r)
+				return
+			}
 			mu.Lock()
 			if _, found := clients[userID]; !found {
 				clients[userID] = &client{

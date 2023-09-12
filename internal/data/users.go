@@ -92,7 +92,7 @@ type UserModel struct {
 
 func (m UserModel) Insert(user *User) error {
 	query := `
-	INSERT INTO users (name,email,password_hash,activated, type) 
+	INSERT INTO users (name,email,password_hash,activated) 
 	VALUES (?,?,?,?,1)
 	`
 	args := []interface{}{user.Name, user.Email, user.Password.hash, user.Activated}
@@ -115,7 +115,7 @@ func (m UserModel) Insert(user *User) error {
 
 func (m UserModel) GetByEmail(email string) (*User, error) {
 	query := `
-		SELECT id, created_at, name, email, password_hash, activated
+		SELECT id, created_at, name, email, password_hash, activated, type
 		FROM users
 		WHERE email = ?`
 
@@ -128,6 +128,7 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 		&user.Email,
 		&user.Password.hash,
 		&user.Activated,
+		&user.Type,
 	)
 
 	if err != nil {
@@ -161,7 +162,7 @@ func (m UserModel) SetUserType(userID int64, userType int) error {
 func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
 	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
 	query := `
-		SELECT users.id, users.created_at, users.name, users.email, users.password_hash, users.activated
+		SELECT users.id, users.created_at, users.name, users.email, users.password_hash, users.activated, users.type
 		FROM users
 		INNER JOIN tokens
 		ON users.id = tokens.user_id
@@ -179,6 +180,7 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 		&user.Email,
 		&user.Password.hash,
 		&user.Activated,
+		&user.Type,
 	)
 	if err != nil {
 		switch {

@@ -134,7 +134,7 @@ func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request
 
 func (app *application) registerPremiumHandler(w http.ResponseWriter, r *http.Request) {
 	user := app.getUserFromContext(r)
-	if user.Type == 1 {
+	if user.Type != 2 {
 		err := app.Model.Users.SetUserType(user.ID, 2)
 		if err != nil {
 			app.serverErrorResponse(w, r, err)

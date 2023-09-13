@@ -94,8 +94,8 @@ func (model *URLModel) Insert(url *URL) error {
 	return nil
 }
 
-// Get retrieves a URL record based on the short URL.
-func (model *URLModel) Get(shortURL string) (*URL, error) {
+// GetByShort retrieves a URL record based on the short URL.
+func (model *URLModel) GetByShort(shortURL string) (*URL, error) {
 	query := `
 		SELECT id, long_url, accessed, redirect, user_id, created, modified FROM urls WHERE short_url = ?;
 	`
@@ -115,14 +115,16 @@ func (model *URLModel) Get(shortURL string) (*URL, error) {
 	return url, nil
 }
 
-// UpdateCount updates the access count of a URL record.
-func (model *URLModel) UpdateCount(shortURL string) error {
+func (model *URLModel) DeleteByShort(shortURL string) error {
 	query := `
-		UPDATE urls SET accessed = accessed + 1 WHERE short_url = ?;
+			DELETE FROM urls WHERE short_url = ?;
 	`
 	_, err := model.DB.Exec(query, shortURL)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return nil
 }
 
 // Update modifies an existing URL record in the database.

@@ -94,3 +94,11 @@ func extractShortcode(url string) (shortcode string, err error) {
 	shortcode = parts[3]
 	return shortcode, nil
 }
+
+func getRedirectCode(redirectType string) int {
+
+	if redirectType == "temporary" {
+		return 307
+	}
+	return 308
+}

@@ -14,6 +14,7 @@ import (
 	"url_shortner/internal/validator"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/go-chi/chi"
 	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
 )
@@ -168,6 +169,40 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (app *application) requireAuthorizedUser(next http.HandlerFunc) http.HandlerFunc {
+	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		shortCode := chi.URLParam(r, "shortCode")
+
+		if shortCode == "" {
+			app.badRequestResponse(w, r, errors.New("shortCode is missing"))
+			return
+		}
+		url, err := app.Model.URLS.GetByShort(shortCode)
+		if err != nil {
+			switch {
+
+			case errors.Is(err, data.ErrRecordNotFound):
+				app.NotFoundResponse(w, r)
+			default:
+				app.serverErrorResponse(w, r, err)
+			}
+			return
+		}
+
+		user := app.getUserFromContext(r)
+
+		if user.ID != url.UserID {
+			app.authorizationRequiredResponse(w, r)
+			return
+		}
+
+		r = app.setURLInContext(r, url)
+		next.ServeHTTP(w, r)
+	})
+
+	return app.requireAuthenticatedUser(fn)
 }
 
 func (app *application) rateLimitForShortner(next http.HandlerFunc) http.HandlerFunc {

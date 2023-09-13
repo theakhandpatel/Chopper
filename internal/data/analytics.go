@@ -31,14 +31,14 @@ func (model *AnalyticsModel) Insert(entry *AnalyticsEntry) error {
 	return err
 }
 
-// GetAll retrieves analytics entries for a specific short URL from the database.
-func (model *AnalyticsModel) GetAll(shortURL string, userID int64) ([]*AnalyticsEntry, error) {
+// Get retrieves analytics entries for a specific short URL from the database.
+func (model *AnalyticsModel) Get(shortURL string) ([]*AnalyticsEntry, error) {
 	query := `
 			SELECT id, short_url, ip, user_agent, referrer, timestamp
 			FROM analytics
-			WHERE short_url = ? and user_id = ?;
+			WHERE short_url = ?;
 	`
-	rows, err := model.DB.Query(query, shortURL, userID)
+	rows, err := model.DB.Query(query, shortURL)
 	if err != nil {
 		return nil, err
 	}

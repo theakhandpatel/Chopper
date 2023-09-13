@@ -18,27 +18,13 @@ type inputURL struct {
 	UserID   int64  `json:"-"`
 }
 
-func ValidateInput(v *validator.Validator, input *inputURL) {
-	v.Check(input.LongURL != "", "long", "cannot be empty")
-	v.Check(govalidator.IsURL(input.LongURL), "long", "must be valid url")
-
-	if input.ShortURL != "" {
-		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 3 chars")
-		v.Check(v.Matches(input.ShortURL, validator.ShortCodeRX), "short", "should containe characters from a-z,A-Z, 0-9")
-	}
-
-	if input.Redirect != "" {
-		v.Check(input.Redirect == "permanent" || input.Redirect == "temporary", "redirect", "must be either 'permanent' or  'temporary'")
-	}
-}
-
 // health check message.
 func (app *application) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	app.writeJSON(w, http.StatusOK, envelope{"message": "OK"})
 }
 
 // URL shortening requests.
-func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) CreateShortURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	var input inputURL
 	err := app.readJSON(w, r, &input)
@@ -49,7 +35,15 @@ func (app *application) ShortenURLHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	v := validator.New()
-	ValidateInput(v, &input)
+	v.Check(input.LongURL != "", "long", "cannot be empty")
+	v.Check(govalidator.IsURL(input.LongURL), "long", "must be valid url")
+	if input.ShortURL != "" {
+		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 3 chars")
+		v.Check(v.Matches(input.ShortURL, validator.ShortCodeRX), "short", "should containe characters from a-z,A-Z, 0-9")
+	}
+	if input.Redirect != "" {
+		v.Check(input.Redirect == "permanent" || input.Redirect == "temporary", "redirect", "must be either 'permanent' or  'temporary'")
+	}
 	if !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
@@ -173,11 +167,73 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 	app.writeJSON(w, http.StatusCreated, envelope{"url": url})
 }
 
+func (app *application) EditShortURLHandler(w http.ResponseWriter, r *http.Request) {
+	url := app.getURLFromContext(r)
+	var input inputURL
+	err := app.readJSON(w, r, &input)
+
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	v := validator.New()
+	if input.LongURL != "" {
+		v.Check(govalidator.IsURL(input.LongURL), "long", "must be valid url")
+	}
+	if input.ShortURL != "" {
+		v.Check(len(input.ShortURL) >= 4, "short", "must be greater than 3 chars")
+		v.Check(v.Matches(input.ShortURL, validator.ShortCodeRX), "short", "should containe characters from a-z,A-Z, 0-9")
+	}
+	if input.Redirect != "" {
+		v.Check(input.Redirect == "permanent" || input.Redirect == "temporary", "redirect", "must be either 'permanent' or  'temporary'")
+	}
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	if input.LongURL != "" {
+		url.Long = input.LongURL
+	}
+	if input.ShortURL != "" {
+		url.Short = input.ShortURL
+	}
+	if input.Redirect != "" {
+		url.Redirect = getRedirectCode(input.Redirect)
+	}
+	url.Modified = time.Now()
+
+	err = app.Model.URLS.Update(url)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusAccepted, envelope{"url": url})
+}
+
+func (app *application) DeleteShortURLHandler(w http.ResponseWriter, r *http.Request) {
+	url := app.getURLFromContext(r)
+
+	err := app.Model.URLS.DeleteByShort(url.Short)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	app.writeJSON(w, http.StatusNoContent, envelope{})
+}
+
+func (app *application) GetShortURLHandler(w http.ResponseWriter, r *http.Request) {
+	url := app.getURLFromContext(r)
+
+	app.writeJSON(w, http.StatusOK, envelope{"url": url})
+}
+
 // expanding short URLs.
 func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := chi.URLParam(r, "shortURL")
 
-	url, err := app.Model.URLS.Get(shortURL)
+	url, err := app.Model.URLS.GetByShort(shortURL)
 	if err != nil {
 		switch {
 
@@ -223,23 +279,13 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 
 // analytics for a given short URL.
 func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
-	shortURL := r.URL.Query().Get("URL")
-	if shortURL == "" {
-		app.badRequestResponse(w, r, errors.New("url parameter is missing"))
-		return
-	}
 
-	shortCode, err := extractShortcode(shortURL)
-	if err != nil {
-		app.NotFoundResponse(w, r)
-		return
-	}
-	user := app.getUserFromContext(r)
-	analytics, err := app.Model.Analytics.GetAll(shortCode, user.ID)
+	url := app.getURLFromContext(r)
+	analytics, err := app.Model.Analytics.Get(url.Short)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	app.writeJSON(w, http.StatusOK, envelope{"short_url": shortURL, "analytics": analytics})
+	app.writeJSON(w, http.StatusOK, envelope{"short_url": url.Short, "analytics": analytics})
 }

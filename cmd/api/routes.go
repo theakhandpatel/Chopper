@@ -11,23 +11,32 @@ import (
 // routes configures the application's routing using Chi router.
 func (app *application) routes() http.Handler {
 	r := chi.NewRouter()
+
+	// Apply middleware for logging and error recovery
+	r.Use(app.metrics)
+	r.Use(middleware.Logger)
+	r.Use(app.recoverPanic)
+	r.Use(app.authenticate)
+
 	r.Get("/debug/vars", expvar.Handler().ServeHTTP)
 
 	r.Get("/", app.HealthCheckHandler)
 
-	r.Post("/api/short", app.rateLimitForShortner(app.CreateShortURLHandler))
-	r.Get("/api/short/{shortCode}", app.requireAuthorizedUser(app.GetShortURLHandler))
-	r.Put("/api/short/{shortCode}", app.requireAuthorizedUser(app.EditShortURLHandler))
-	r.Delete("/api/short/{shortCode}", app.requireAuthorizedUser(app.DeleteShortURLHandler))
-	r.Get("/api/stats/{shortCode}", app.requireAuthenticatedUser(app.AnalyticsHandler))
+	r.Get("/api/stats/{shortCode}", app.requirePremiumUser(app.AnalyticsHandler))
 
+	r.Route("/api/short", func(sr chi.Router) {
+		sr.Post("/", app.dailyLimiter(app.CreateShortURLHandler))
+		sr.Get("/{shortCode}", app.requireAuthorizedUser(app.GetShortURLHandler))
+		sr.Put("/{shortCode}", app.requirePremiumUser(app.EditShortURLHandler))
+		sr.Delete("/{shortCode}", app.requirePremiumUser(app.DeleteShortURLHandler))
+
+	})
 	r.Post("/api/signup", app.registerUserHandler)
 	r.Post("/api/signin", app.loginUserHandler)
 	r.Post("/api/signout", app.requireAuthenticatedUser(app.logoutUserHandler))
-
 	r.Post("/api/premium", app.requireAuthenticatedUser(app.registerPremiumHandler))
 
 	r.Get("/{shortURL}", app.rateLimit(app.ExpandURLHandler))
-	// Apply middleware for logging and error recovery
-	return app.metrics(middleware.Logger(app.recoverPanic(app.authenticate(r))))
+
+	return r
 }

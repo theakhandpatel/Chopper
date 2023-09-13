@@ -205,7 +205,21 @@ func (app *application) requireAuthorizedUser(next http.HandlerFunc) http.Handle
 	return app.requireAuthenticatedUser(fn)
 }
 
-func (app *application) rateLimitForShortner(next http.HandlerFunc) http.HandlerFunc {
+func (app *application) requirePremiumUser(next http.HandlerFunc) http.HandlerFunc {
+	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := app.getUserFromContext(r)
+
+		if user.IsPremium() {
+			app.authorizationRequiredResponse(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+
+	return app.requireAuthorizedUser(fn)
+}
+
+func (app *application) dailyLimiter(next http.HandlerFunc) http.HandlerFunc {
 	type client struct {
 		limiter  *rate.Limiter
 		lastSeen time.Time
@@ -231,8 +245,9 @@ func (app *application) rateLimitForShortner(next http.HandlerFunc) http.Handler
 	}()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Only carry out the rate limiting check if it's enabled in the application configuration.
-		if !app.isAuthenticated(r) {
+		user := app.getUserFromContext(r)
+
+		if user.IsAnonymous() {
 			ip := realip.FromRequest(r)
 
 			mu.Lock()
@@ -250,7 +265,7 @@ func (app *application) rateLimitForShortner(next http.HandlerFunc) http.Handler
 				return
 			}
 			mu.Unlock()
-		} else {
+		} else if !user.IsPremium() {
 
 			user := app.getUserFromContext(r)
 			userID := strconv.FormatInt(user.ID, 10)

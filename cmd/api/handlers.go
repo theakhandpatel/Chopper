@@ -187,20 +187,28 @@ func (app *application) EditShortURLHandler(w http.ResponseWriter, r *http.Reque
 	if input.Redirect != "" {
 		v.Check(input.Redirect == "permanent" || input.Redirect == "temporary", "redirect", "must be either 'permanent' or  'temporary'")
 	}
+	v.Check(input.LongURL != "" || input.ShortURL != "" || input.Redirect != "", "all", "Need Updated Data")
+
+	updateNeeded := true
+	if input.LongURL != "" && input.LongURL != url.Long {
+		url.Long = input.LongURL
+		updateNeeded = true
+	}
+	if input.ShortURL != "" && input.ShortURL != url.Short {
+		url.Short = input.ShortURL
+		updateNeeded = true
+	}
+	if input.Redirect != "" && getRedirectCode(input.Redirect) != url.Redirect {
+		url.Redirect = getRedirectCode(input.Redirect)
+		updateNeeded = true
+	}
+	v.Check(updateNeeded, "all", "Nothing to Update")
+
 	if !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	if input.LongURL != "" {
-		url.Long = input.LongURL
-	}
-	if input.ShortURL != "" {
-		url.Short = input.ShortURL
-	}
-	if input.Redirect != "" {
-		url.Redirect = getRedirectCode(input.Redirect)
-	}
 	url.Modified = time.Now()
 
 	err = app.Model.URLS.Update(url)
@@ -225,7 +233,6 @@ func (app *application) DeleteShortURLHandler(w http.ResponseWriter, r *http.Req
 
 func (app *application) GetShortURLHandler(w http.ResponseWriter, r *http.Request) {
 	url := app.getURLFromContext(r)
-
 	app.writeJSON(w, http.StatusOK, envelope{"url": url})
 }
 

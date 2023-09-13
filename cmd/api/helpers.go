@@ -96,9 +96,11 @@ func extractShortcode(url string) (shortcode string, err error) {
 }
 
 func getRedirectCode(redirectType string) int {
-
 	if redirectType == "temporary" {
 		return 307
+	} else if redirectType == "permanent" {
+		return 308
 	}
-	return 308
+
+	return 0
 }

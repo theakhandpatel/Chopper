@@ -1,19 +1,27 @@
 package utils
 
 import (
-	"crypto/md5"
-	"encoding/binary"
+	"github.com/jaevor/go-nanoid"
 )
 
-// generates a short URL based on the given long URL.
-func Shorten(longURL string) string {
-	uid := generateUniqueIntIdentifier(longURL) // Generate a unique integer identifier based on the long URL.
-	shortURL := EncodeToBase62(uint64(uid))     // Convert the identifier to a Base62 encoded string.
-	return shortURL
+var shortCodeof8Generator func() string
+
+func init() {
+	var err error
+	shortCodeof8Generator, err = nanoid.Standard(8)
+	if err != nil {
+		panic(err)
+	}
 }
 
-// generates a unique 32-bit integer identifier from a URL .
-func generateUniqueIntIdentifier(url string) uint32 {
-	hash := md5.Sum([]byte(url))
-	return binary.BigEndian.Uint32(hash[:4]) // Convert the first 4 bytes of the hash to a 32-bit integer.
+// generates a short URL based on the given long URL.
+func GetShortCode(length int) string {
+
+	shortCode := shortCodeof8Generator()
+	// Crop the shortCode to the specified length.
+	if length > 0 && length < len(shortCode) {
+		shortCode = shortCode[:length]
+	}
+
+	return shortCode
 }

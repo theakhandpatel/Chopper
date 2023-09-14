@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 	"url_shortner/internal/utils"
 
@@ -25,7 +24,7 @@ type URL struct {
 	ID       int64
 	Long     string
 	Short    string
-	Accessed int64
+	Accessed int64 `json:"-"`
 	Redirect int
 	UserID   int64     `json:"-"`
 	Created  time.Time `json:"-"`
@@ -35,7 +34,11 @@ type URL struct {
 // NewURL creates a new URL instance with a shortened version of the provided long URL.
 func NewURL(longURL string, shortURL string, redirect int, userID int64) *URL {
 	if shortURL == "" {
-		shortURL = utils.Shorten(longURL)
+		if userID == AnonymousUser.ID {
+			shortURL = utils.GetShortCode(8)
+		} else {
+			shortURL = utils.GetShortCode(6)
+		}
 	}
 	if redirect != http.StatusTemporaryRedirect {
 		redirect = http.StatusPermanentRedirect
@@ -51,12 +54,13 @@ func NewURL(longURL string, shortURL string, redirect int, userID int64) *URL {
 	}
 }
 
-// ReShorten generates a new short URL by appending a timestamp to the long URL and shortening it again.
-func (url *URL) ReShorten() {
-	timestamp := time.Now().UnixNano()
-	url.Created = time.Now()
-	url.Modified = url.Created
-	url.Short = utils.Shorten(url.Long + strconv.FormatInt(timestamp, 10))
+// Reshorten generates a new short URL by appending a timestamp to the long URL and shortening it again.
+func (url *URL) Reshorten() {
+	if url.UserID == AnonymousUser.ID {
+		url.Short = utils.GetShortCode(8)
+	} else {
+		url.Short = utils.GetShortCode(6)
+	}
 }
 
 // URLModel represents the database model for URL operations.

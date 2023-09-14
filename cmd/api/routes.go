@@ -29,8 +29,8 @@ func (app *application) routes() http.Handler {
 		sr.Get("/{shortCode}", app.requireAuthorizedUser(app.GetShortURLHandler))
 		sr.Put("/{shortCode}", app.requirePremiumUser(app.EditShortURLHandler))
 		sr.Delete("/{shortCode}", app.requirePremiumUser(app.DeleteShortURLHandler))
-
 	})
+
 	r.Post("/api/signup", app.registerUserHandler)
 	r.Post("/api/signin", app.loginUserHandler)
 	r.Post("/api/signout", app.requireAuthenticatedUser(app.logoutUserHandler))

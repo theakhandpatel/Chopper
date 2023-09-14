@@ -49,6 +49,7 @@ func (app *application) CreateShortURLHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	input.LongURL = addHTTPPrefix(input.LongURL)
 	user := app.getUserFromContext(r)
 	input.UserID = user.ID
 	if user == data.AnonymousUser {
@@ -108,7 +109,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 		}
 
 		if err == data.ErrDuplicateEntry {
-			url.ReShorten() //  modify the short code
+			url.Reshorten() //  modify the short code
 		}
 	}
 
@@ -155,7 +156,7 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 		}
 
 		if err == data.ErrDuplicateEntry {
-			url.ReShorten() //  modify the short code
+			url.Reshorten() //  modify the short code
 		}
 	}
 

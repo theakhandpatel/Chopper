@@ -92,7 +92,7 @@ type UserModel struct {
 
 func (m UserModel) Insert(user *User) error {
 	query := `
-	INSERT INTO users (name,email,password_hash,activated) 
+	INSERT INTO users (name,email,password_hash,activated,type) 
 	VALUES (?,?,?,?,1)
 	`
 	args := []interface{}{user.Name, user.Email, user.Password.hash, user.Activated}
@@ -107,7 +107,7 @@ func (m UserModel) Insert(user *User) error {
 		}
 		return err
 	}
-
+	user.Type = 1
 	user.ID, _ = result.LastInsertId()
 
 	return nil

@@ -85,16 +85,6 @@ func (app *application) isAuthenticated(r *http.Request) bool {
 	return !user.IsAnonymous()
 }
 
-// extractShortcode extracts the shortcode from the given URL.
-func extractShortcode(url string) (shortcode string, err error) {
-	parts := strings.Split(url, "/")
-	if len(parts) < 4 {
-		return "", fmt.Errorf("invalid URL format")
-	}
-	shortcode = parts[3]
-	return shortcode, nil
-}
-
 func getRedirectCode(redirectType string) int {
 	if redirectType == "temporary" {
 		return 307
@@ -103,4 +93,13 @@ func getRedirectCode(redirectType string) int {
 	}
 
 	return 0
+}
+
+func addHTTPPrefix(url string) string {
+	// Check if the URL starts with "http://" or "https://"
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		// If not, add "http://" as the prefix
+		url = "http://" + url
+	}
+	return url
 }

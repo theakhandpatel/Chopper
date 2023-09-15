@@ -3,7 +3,7 @@ CREATE TABLE urls_new (
     long_url TEXT NOT NULL,
     short_url TEXT NOT NULL,
     accessed INTEGER DEFAULT 0,
-    redirect INTEGER DEFAULT 301,
+    redirect INTEGER DEFAULT 308,
     user_id INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY(user_id) REFERENCES users(id)
     UNIQUE(short_url)

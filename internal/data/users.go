@@ -22,7 +22,6 @@ type User struct {
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	Password  password  `json:"-"`
-	Activated bool      `json:"activated"`
 	Type      int       `json:"type"`
 }
 
@@ -91,11 +90,13 @@ type UserModel struct {
 }
 
 func (m UserModel) Insert(user *User) error {
+
 	query := `
-	INSERT INTO users (name,email,password_hash,activated,type) 
-	VALUES (?,?,?,?,1)
+	INSERT INTO users (name,email,password_hash,type,created_at) 
+	VALUES (?,?,?,?,?)
 	`
-	args := []interface{}{user.Name, user.Email, user.Password.hash, user.Activated}
+	curTime := time.Now()
+	args := []interface{}{user.Name, user.Email, user.Password.hash, user.Type, curTime}
 
 	result, err := m.DB.Exec(query, args...)
 	if err != nil {
@@ -107,15 +108,15 @@ func (m UserModel) Insert(user *User) error {
 		}
 		return err
 	}
-	user.Type = 1
 	user.ID, _ = result.LastInsertId()
+	user.CreatedAt = curTime
 
 	return nil
 }
 
 func (m UserModel) GetByEmail(email string) (*User, error) {
 	query := `
-		SELECT id, created_at, name, email, password_hash, activated, type
+		SELECT id, created_at, name, email, password_hash, type
 		FROM users
 		WHERE email = ?`
 
@@ -127,7 +128,6 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 		&user.Name,
 		&user.Email,
 		&user.Password.hash,
-		&user.Activated,
 		&user.Type,
 	)
 
@@ -162,7 +162,7 @@ func (m UserModel) SetUserType(userID int64, userType int) error {
 func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
 	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
 	query := `
-		SELECT users.id, users.created_at, users.name, users.email, users.password_hash, users.activated, users.type
+		SELECT users.id, users.created_at, users.name, users.email, users.password_hash, users.type
 		FROM users
 		INNER JOIN tokens
 		ON users.id = tokens.user_id
@@ -179,7 +179,6 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 		&user.Name,
 		&user.Email,
 		&user.Password.hash,
-		&user.Activated,
 		&user.Type,
 	)
 	if err != nil {

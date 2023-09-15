@@ -1,4 +1,4 @@
-CREATE TABLE "new_urls" (
+CREATE TABLE new_urls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     long_url TEXT NOT NULL,
     short_url TEXT NOT NULL,
@@ -12,14 +12,14 @@ CREATE TABLE "new_urls" (
 );
 
 
-INSERT INTO "new_urls" (
+INSERT INTO new_urls (
     id, long_url, short_url, accessed, redirect, user_id, created, modified
 )
 SELECT
     id, long_url, short_url, accessed, redirect, user_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 FROM
-    "urls";
+    urls;
 
-DROP TABLE "urls";
+DROP TABLE urls;
 
-ALTER TABLE "new_urls" RENAME TO "urls";
+ALTER TABLE new_urls RENAME TO urls;

@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"url_shortner/internal/data"
 
+	"github.com/golang-migrate/migrate/v4"
+	sqlite3 "github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -64,6 +67,25 @@ func openDB(dsn string) (*sql.DB, error) {
 	}
 	if err = db.Ping(); err != nil {
 		return nil, err
+	}
+
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
+	if err != nil {
+		panic(err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://./migrations", // Path to your migration files
+		"sqlite3",             // Database driver name
+		driver,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	// Run all "up" migrations
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		panic(err)
 	}
 
 	return db, nil

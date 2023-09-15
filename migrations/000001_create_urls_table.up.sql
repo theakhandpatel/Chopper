@@ -6,3 +6,4 @@
 		redirect INTEGER DEFAULT 301,
 		UNIQUE(short_url)
 	);
+

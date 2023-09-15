@@ -268,12 +268,11 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 
 	if url.UserID != data.AnonymousUser.ID {
 		analyticsEntry := data.AnalyticsEntry{
-			ShortURL:  shortURL,
 			IP:        r.RemoteAddr,
 			UserAgent: r.UserAgent(),
 			Referrer:  r.Referer(),
 			Timestamp: time.Now(),
-			UserID:    url.UserID,
+			URLID:     url.ID,
 		}
 
 		err = app.Model.Analytics.Insert(&analyticsEntry)
@@ -289,7 +288,7 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 
 	url := app.getURLFromContext(r)
-	analytics, err := app.Model.Analytics.Get(url.Short)
+	analytics, err := app.Model.Analytics.GetByURLID(url.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

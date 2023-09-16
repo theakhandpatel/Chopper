@@ -47,13 +47,13 @@ func (app *application) rateLimit(next http.HandlerFunc) http.HandlerFunc {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Only carry out the rate limiting check if it's enabled in the application configuration.
-		if app.config.limiter.enabled {
+		if app.config.rateLimiter.enabled {
 			ip := realip.FromRequest(r)
 
 			mu.Lock()
 			if _, found := clients[ip]; !found {
 				clients[ip] = &client{
-					limiter: rate.NewLimiter(rate.Limit(app.config.limiter.rps), app.config.limiter.burst),
+					limiter: rate.NewLimiter(rate.Limit(app.config.rateLimiter.rps), app.config.rateLimiter.burst),
 				}
 			}
 			clients[ip].lastSeen = time.Now()
@@ -65,6 +65,85 @@ func (app *application) rateLimit(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			mu.Unlock()
+		}
+
+		// If rate limiting is not triggered, pass the request to the next handler.
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) dailyLimiter(next http.HandlerFunc) http.HandlerFunc {
+	type client struct {
+		limiter  *rate.Limiter
+		lastSeen time.Time
+	}
+
+	var (
+		mu      sync.Mutex
+		clients = make(map[string]*client)
+	)
+
+	// Periodically clean up the clients map to remove stale entries.
+	go func() {
+		for {
+			time.Sleep(time.Minute)
+			mu.Lock()
+			for ip, client := range clients {
+				if time.Since(client.lastSeen) > 48*time.Hour {
+					delete(clients, ip)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if app.config.dailyLimiter.enabled {
+			user := app.getUserFromContext(r)
+
+			if user.IsAnonymous() {
+				ip := realip.FromRequest(r)
+
+				mu.Lock()
+				if _, found := clients[ip]; !found {
+					clients[ip] = &client{
+						limiter: rate.NewLimiter(rate.Limit(app.config.dailyLimiter.anonymous/24.0/60.0/60.0), int(app.config.dailyLimiter.anonymous)),
+					}
+				}
+				clients[ip].lastSeen = time.Now()
+				// Check if the client's request rate exceeds the rate limit.
+				if !clients[ip].limiter.Allow() {
+					mu.Unlock()
+					app.rateLimitExceededResponse(w, r)
+					return
+				}
+				mu.Unlock()
+			} else if !user.IsPremium() {
+
+				user := app.getUserFromContext(r)
+				userID := strconv.FormatInt(user.ID, 10)
+				if user.Type == 2 {
+					next.ServeHTTP(w, r)
+					return
+				}
+
+				mu.Lock()
+				if _, found := clients[userID]; !found {
+					clients[userID] = &client{
+						limiter: rate.NewLimiter(rate.Limit(app.config.dailyLimiter.authenticated/24.0/60.0/60.0), int(app.config.dailyLimiter.authenticated)),
+					}
+				}
+				clients[userID].lastSeen = time.Now()
+
+				// Check if the client's request rate exceeds the rate limit.
+				if !clients[userID].limiter.Allow() {
+					mu.Unlock()
+					app.rateLimitExceededResponse(w, r)
+					return
+				}
+				mu.Unlock()
+			}
 		}
 
 		// If rate limiting is not triggered, pass the request to the next handler.
@@ -217,80 +296,4 @@ func (app *application) requirePremiumUser(next http.HandlerFunc) http.HandlerFu
 	})
 
 	return app.requireAuthorizedUser(fn)
-}
-
-func (app *application) dailyLimiter(next http.HandlerFunc) http.HandlerFunc {
-	type client struct {
-		limiter  *rate.Limiter
-		lastSeen time.Time
-	}
-
-	var (
-		mu      sync.Mutex
-		clients = make(map[string]*client)
-	)
-
-	// Periodically clean up the clients map to remove stale entries.
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			mu.Lock()
-			for ip, client := range clients {
-				if time.Since(client.lastSeen) > 48*time.Hour {
-					delete(clients, ip)
-				}
-			}
-			mu.Unlock()
-		}
-	}()
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := app.getUserFromContext(r)
-
-		if user.IsAnonymous() {
-			ip := realip.FromRequest(r)
-
-			mu.Lock()
-			if _, found := clients[ip]; !found {
-				clients[ip] = &client{
-					limiter: rate.NewLimiter(rate.Limit(3.0/24.0/60.0/60.0), 3),
-				}
-			}
-			clients[ip].lastSeen = time.Now()
-			fmt.Println("for the ip", ip, "this is the limit", clients[ip].limiter.Tokens())
-			// Check if the client's request rate exceeds the rate limit.
-			if !clients[ip].limiter.Allow() {
-				mu.Unlock()
-				app.rateLimitExceededResponse(w, r)
-				return
-			}
-			mu.Unlock()
-		} else if !user.IsPremium() {
-
-			user := app.getUserFromContext(r)
-			userID := strconv.FormatInt(user.ID, 10)
-			if user.Type == 2 {
-				next.ServeHTTP(w, r)
-				return
-			}
-			mu.Lock()
-			if _, found := clients[userID]; !found {
-				clients[userID] = &client{
-					limiter: rate.NewLimiter(rate.Limit(10.0/24.0/60.0/60.0), 10),
-				}
-			}
-			clients[userID].lastSeen = time.Now()
-
-			// Check if the client's request rate exceeds the rate limit.
-			if !clients[userID].limiter.Allow() {
-				mu.Unlock()
-				app.rateLimitExceededResponse(w, r)
-				return
-			}
-			mu.Unlock()
-		}
-
-		// If rate limiting is not triggered, pass the request to the next handler.
-		next.ServeHTTP(w, r)
-	})
 }

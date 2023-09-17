@@ -11,7 +11,7 @@ import (
 
 func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name     string `json:"name"`
+		Username string `json:"username"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
@@ -22,9 +22,9 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	user := &data.User{
-		Name:  input.Name,
-		Email: strings.ToLower(input.Email),
-		Type:  1,
+		Username: input.Username,
+		Email:    strings.ToLower(input.Email),
+		Type:     1,
 	}
 
 	err = user.Password.Set(input.Password)

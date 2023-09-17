@@ -19,7 +19,7 @@ var AnonymousUser = &User{}
 type User struct {
 	ID        int64     `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	Name      string    `json:"name"`
+	Username  string    `json:"username"`
 	Email     string    `json:"email"`
 	Password  password  `json:"-"`
 	Type      int       `json:"type"`
@@ -71,8 +71,8 @@ func ValidatePasswordPlaintext(v *validator.Validator, password string) {
 	v.Check(len(password) <= 72, "password", "must not be more than 72 bytes long")
 }
 func ValidateUser(v *validator.Validator, user *User) {
-	v.Check(user.Name != "", "name", "must be provided")
-	v.Check(len(user.Name) <= 500, "name", "must not be more than 500 bytes long")
+	v.Check(user.Username != "", "name", "must be provided")
+	v.Check(len(user.Username) <= 500, "name", "must not be more than 500 bytes long")
 
 	ValidateEmail(v, user.Email)
 
@@ -96,7 +96,7 @@ func (m UserModel) Insert(user *User) error {
 	VALUES (?,?,?,?,?)
 	`
 	curTime := time.Now()
-	args := []interface{}{user.Name, user.Email, user.Password.hash, user.Type, curTime}
+	args := []interface{}{user.Username, user.Email, user.Password.hash, user.Type, curTime}
 
 	result, err := m.DB.Exec(query, args...)
 	if err != nil {
@@ -125,7 +125,7 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 	err := m.DB.QueryRow(query, email).Scan(
 		&user.ID,
 		&user.CreatedAt,
-		&user.Name,
+		&user.Username,
 		&user.Email,
 		&user.Password.hash,
 		&user.Type,
@@ -176,7 +176,7 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 	err := m.DB.QueryRow(query, args...).Scan(
 		&user.ID,
 		&user.CreatedAt,
-		&user.Name,
+		&user.Username,
 		&user.Email,
 		&user.Password.hash,
 		&user.Type,

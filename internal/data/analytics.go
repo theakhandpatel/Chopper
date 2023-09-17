@@ -56,3 +56,11 @@ func (model *AnalyticsModel) GetByURLID(urlID int64) ([]*AnalyticsEntry, error) 
 
 	return analytics, nil
 }
+
+func (model *AnalyticsModel) DeleteByURLID(urlID int64) error {
+	_, err := model.DB.Exec("DELETE FROM analytics WHERE url_id = ?", urlID)
+	if err != nil {
+		return err
+	}
+	return nil
+}

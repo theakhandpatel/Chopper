@@ -21,43 +21,43 @@ var ErrDuplicateEntry = errors.New("entry already exists")
 
 // URL represents a shortened URL record.
 type URL struct {
-	ID       int64 `json:"-"`
-	Long     string
-	Short    string
-	Redirect int
-	UserID   int64     `json:"-"`
-	Created  time.Time `json:"-"`
-	Modified time.Time
+	ID        int64 `json:"-"`
+	LongForm  string
+	ShortCode string
+	Redirect  int
+	UserID    int64     `json:"-"`
+	Created   time.Time `json:"-"`
+	Modified  time.Time
 }
 
 // NewURL creates a new URL instance with a shortened version of the provided long URL.
-func NewURL(longURL string, shortURL string, redirect int, userID int64) *URL {
-	if shortURL == "" {
+func NewURL(longURL string, shortCode string, redirect int, userID int64) *URL {
+	if shortCode == "" {
 		if userID == AnonymousUser.ID {
-			shortURL = utils.GetShortCode(8)
+			shortCode = utils.GetShortCode(8)
 		} else {
-			shortURL = utils.GetShortCode(6)
+			shortCode = utils.GetShortCode(6)
 		}
 	}
 	if redirect != http.StatusTemporaryRedirect {
 		redirect = http.StatusPermanentRedirect
 	}
 	return &URL{
-		Long:     longURL,
-		Short:    shortURL,
-		Redirect: redirect,
-		Created:  time.Now(),
-		Modified: time.Now(),
-		UserID:   int64(userID),
+		LongForm:  longURL,
+		ShortCode: shortCode,
+		Redirect:  redirect,
+		Created:   time.Now(),
+		Modified:  time.Now(),
+		UserID:    int64(userID),
 	}
 }
 
 // Reshorten generates a new short URL by appending a timestamp to the long URL and shortening it again.
 func (url *URL) Reshorten() {
 	if url.UserID == AnonymousUser.ID {
-		url.Short = utils.GetShortCode(8)
+		url.ShortCode = utils.GetShortCode(8)
 	} else {
-		url.Short = utils.GetShortCode(6)
+		url.ShortCode = utils.GetShortCode(6)
 	}
 }
 
@@ -72,7 +72,7 @@ func (model *URLModel) Insert(url *URL) error {
 		INSERT INTO urls (long_url, short_url, redirect, user_id, created, modified) VALUES (?,?,?,?,?,?);
 	`
 
-	res, err := model.DB.Exec(query, url.Long, url.Short, url.Redirect, url.UserID, url.Created, url.Modified)
+	res, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Created, url.Modified)
 
 	if err != nil {
 		// Check for duplicate entry error and return a predefined error.
@@ -97,16 +97,16 @@ func (model *URLModel) Insert(url *URL) error {
 }
 
 // GetByShort retrieves a URL record based on the short URL.
-func (model *URLModel) GetByShort(shortURL string) (*URL, error) {
+func (model *URLModel) GetByShort(shortCode string) (*URL, error) {
 	query := `
 		SELECT id, long_url,  redirect, user_id, created, modified FROM urls WHERE short_url = ?;
 	`
-	row := model.DB.QueryRow(query, shortURL)
+	row := model.DB.QueryRow(query, shortCode)
 
 	url := &URL{
-		Short: shortURL,
+		ShortCode: shortCode,
 	}
-	err := row.Scan(&url.ID, &url.Long, &url.Redirect, &url.UserID, &url.Created, &url.Modified)
+	err := row.Scan(&url.ID, &url.LongForm, &url.Redirect, &url.UserID, &url.Created, &url.Modified)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound
@@ -117,11 +117,11 @@ func (model *URLModel) GetByShort(shortURL string) (*URL, error) {
 	return url, nil
 }
 
-func (model *URLModel) DeleteByShort(shortURL string) error {
+func (model *URLModel) DeleteByShort(shortCode string) error {
 	query := `
 			DELETE FROM urls WHERE short_url = ?;
 	`
-	_, err := model.DB.Exec(query, shortURL)
+	_, err := model.DB.Exec(query, shortCode)
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func (model *URLModel) Update(url *URL) error {
 		WHERE id = ?;
 	`
 
-	_, err := model.DB.Exec(query, url.Long, url.Short, url.Redirect, url.UserID, url.Modified, url.ID)
+	_, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Modified, url.ID)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (model *URLModel) GetByLongURL(longURL string, redirectType int, userID int
 	url := &URL{
 		UserID: userID,
 	}
-	err := row.Scan(&url.ID, &url.Long, &url.Short, &url.Redirect, &url.Created, &url.Modified)
+	err := row.Scan(&url.ID, &url.LongForm, &url.ShortCode, &url.Redirect, &url.Created, &url.Modified)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound

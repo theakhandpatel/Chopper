@@ -288,7 +288,7 @@ func (app *application) requirePremiumUser(next http.HandlerFunc) http.HandlerFu
 	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := app.getUserFromContext(r)
 
-		if user.IsPremium() {
+		if !user.IsPremium() {
 			app.authorizationRequiredResponse(w, r)
 			return
 		}

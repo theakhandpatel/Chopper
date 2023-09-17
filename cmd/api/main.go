@@ -87,8 +87,8 @@ func openDB(dsn string, migrationsPath string) (*sql.DB, error) {
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
-		"file://"+migrationsPath, // Path to your migration files
-		"sqlite3",                // Database driver name
+		"file://"+migrationsPath,
+		"sqlite3", // Database driver name
 		driver,
 	)
 	if err != nil {

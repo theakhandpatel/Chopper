@@ -118,10 +118,22 @@ func (model *URLModel) GetByShort(shortCode string) (*URL, error) {
 }
 
 func (model *URLModel) DeleteByShort(shortCode string) error {
+	tx, err := model.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // Rollback the transaction if there's an error
+
 	query := `
-			DELETE FROM urls WHERE short_url = ?;
+		DELETE FROM urls WHERE short_url = ?;
 	`
-	_, err := model.DB.Exec(query, shortCode)
+	_, err = tx.Exec(query, shortCode)
+	if err != nil {
+		return err
+	}
+
+	// Commit the transaction to make the changes permanent
+	err = tx.Commit()
 	if err != nil {
 		return err
 	}

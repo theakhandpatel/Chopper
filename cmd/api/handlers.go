@@ -78,7 +78,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 	//If no custom code is required
 	if input.ShortURL == "" {
 
-		existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, redirectType, input.UserID)
+		existingURL, err := app.Models.URLS.GetByLongURL(input.LongURL, redirectType, input.UserID)
 
 		if err != nil && err != data.ErrRecordNotFound {
 			app.serverErrorResponse(w, r, err)
@@ -88,7 +88,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 		if existingURL != nil {
 			if redirectType == existingURL.Redirect || input.Redirect == "" {
 				existingURL.Modified = time.Now()
-				app.Model.URLS.Update(existingURL)
+				app.Models.URLS.Update(existingURL)
 				app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
 				return
 			}
@@ -105,7 +105,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 	urlInserted := false
 
 	for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
-		err := app.Model.URLS.Insert(url)
+		err := app.Models.URLS.Insert(url)
 		if err == nil {
 			urlInserted = true
 			break
@@ -133,7 +133,7 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 	var url *data.URL
 
 	// if the URL already exists in the database.
-	existingURL, err := app.Model.URLS.GetByLongURL(input.LongURL, http.StatusPermanentRedirect, input.UserID)
+	existingURL, err := app.Models.URLS.GetByLongURL(input.LongURL, http.StatusPermanentRedirect, input.UserID)
 	if err != nil && err != data.ErrRecordNotFound {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -141,7 +141,7 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 
 	if existingURL != nil {
 		existingURL.Modified = time.Now()
-		app.Model.URLS.Update(existingURL)
+		app.Models.URLS.Update(existingURL)
 		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
 		return
 	}
@@ -152,7 +152,7 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 	urlInserted := false
 
 	for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
-		err := app.Model.URLS.Insert(url)
+		err := app.Models.URLS.Insert(url)
 		if err == nil {
 			urlInserted = true
 			break
@@ -220,7 +220,7 @@ func (app *application) EditShortURLHandler(w http.ResponseWriter, r *http.Reque
 
 	url.Modified = time.Now()
 
-	err = app.Model.URLS.Update(url)
+	err = app.Models.URLS.Update(url)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -233,13 +233,13 @@ func (app *application) EditShortURLHandler(w http.ResponseWriter, r *http.Reque
 func (app *application) DeleteShortURLHandler(w http.ResponseWriter, r *http.Request) {
 	url := app.getURLFromContext(r)
 
-	err := app.Model.URLS.DeleteByShort(url.ShortCode)
+	err := app.Models.URLS.DeleteByShort(url.ShortCode)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 	app.writeJSON(w, http.StatusNoContent, envelope{})
-	err = app.Model.Analytics.DeleteByURLID(url.ID)
+	err = app.Models.Analytics.DeleteByURLID(url.ID)
 	if err != nil {
 		app.logResponse(r, err)
 	}
@@ -255,7 +255,7 @@ func (app *application) GetShortURLHandler(w http.ResponseWriter, r *http.Reques
 func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := chi.URLParam(r, "shortCode")
 
-	url, err := app.Model.URLS.GetByShort(shortURL)
+	url, err := app.Models.URLS.GetByShort(shortURL)
 	if err != nil {
 		switch {
 
@@ -289,7 +289,7 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 			URLID:     url.ID,
 		}
 
-		err = app.Model.Analytics.Insert(&analyticsEntry)
+		err = app.Models.Analytics.Insert(&analyticsEntry)
 		if err != nil {
 			app.logResponse(r, err)
 		}
@@ -302,7 +302,7 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 
 	url := app.getURLFromContext(r)
-	analytics, err := app.Model.Analytics.GetByURLID(url.ID)
+	analytics, err := app.Models.Analytics.GetByURLID(url.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

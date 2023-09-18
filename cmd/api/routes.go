@@ -33,6 +33,9 @@ func (app *application) routes() http.Handler {
 
 	r.Post("/api/signup", app.registerUserHandler)
 	r.Post("/api/signin", app.loginUserHandler)
+	r.Post("/api/resetpassword", app.resetPasswordHandler)
+	r.Post("/api/changepassword", app.requireAuthenticatedUser(app.changePassswordHandler))
+	r.Post("/api/changeemail", app.requireAuthenticatedUser(app.changeEmailHandler))
 	r.Post("/api/signout", app.requireAuthenticatedUser(app.logoutUserHandler))
 	r.Post("/api/premium", app.requireAuthenticatedUser(app.registerPremiumHandler))
 

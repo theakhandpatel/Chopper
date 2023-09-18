@@ -35,7 +35,7 @@ func (u *User) IsPremium() bool {
 
 type password struct {
 	plaintext *string
-	hash      []byte
+	Hash      []byte `json:"-"`
 }
 
 func (p *password) Set(plaintextPassword string) error {
@@ -44,12 +44,12 @@ func (p *password) Set(plaintextPassword string) error {
 		return err
 	}
 	p.plaintext = &plaintextPassword
-	p.hash = hash
+	p.Hash = hash
 	return nil
 }
 
 func (p *password) Matches(plaintextPassword string) (bool, error) {
-	err := bcrypt.CompareHashAndPassword(p.hash, []byte(plaintextPassword))
+	err := bcrypt.CompareHashAndPassword(p.Hash, []byte(plaintextPassword))
 	if err != nil {
 		switch {
 		case errors.Is(err, bcrypt.ErrMismatchedHashAndPassword):
@@ -79,7 +79,7 @@ func ValidateUser(v *validator.Validator, user *User) {
 	if user.Password.plaintext != nil {
 		ValidatePasswordPlaintext(v, *user.Password.plaintext)
 	}
-	if user.Password.hash == nil {
+	if user.Password.Hash == nil {
 		panic("missing password hash for user")
 	}
 
@@ -96,7 +96,7 @@ func (m UserModel) Insert(user *User) error {
 	VALUES (?,?,?,?,?)
 	`
 	curTime := time.Now()
-	args := []interface{}{user.Username, user.Email, user.Password.hash, user.Type, curTime}
+	args := []interface{}{user.Username, user.Email, user.Password.Hash, user.Type, curTime}
 
 	result, err := m.DB.Exec(query, args...)
 	if err != nil {
@@ -127,7 +127,7 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 		&user.CreatedAt,
 		&user.Username,
 		&user.Email,
-		&user.Password.hash,
+		&user.Password.Hash,
 		&user.Type,
 	)
 
@@ -159,6 +159,38 @@ func (m UserModel) SetUserType(userID int64, userType int) error {
 	return nil
 }
 
+func (m UserModel) SetEmail(userID int64, email string) error {
+	query := `
+			UPDATE users
+			SET email = ?
+			WHERE id = ?
+	`
+	args := []interface{}{email, userID}
+
+	_, err := m.DB.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m UserModel) SetPassword(userID int64, passwordHash string) error {
+	query := `
+			UPDATE users
+			SET password_hash = ?
+			WHERE id = ?
+	`
+	args := []interface{}{passwordHash, userID}
+
+	_, err := m.DB.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
 	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
 	query := `
@@ -178,7 +210,7 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 		&user.CreatedAt,
 		&user.Username,
 		&user.Email,
-		&user.Password.hash,
+		&user.Password.Hash,
 		&user.Type,
 	)
 	if err != nil {

@@ -223,7 +223,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		user, err := app.Model.Users.GetForToken(data.ScopeAuthentication, token)
+		user, err := app.Models.Users.GetForToken(data.ScopeAuthentication, token)
 		if err != nil {
 			switch {
 			case errors.Is(err, data.ErrRecordNotFound):
@@ -258,7 +258,7 @@ func (app *application) requireAuthorizedUser(next http.HandlerFunc) http.Handle
 			app.badRequestResponse(w, r, errors.New("shortCode is missing"))
 			return
 		}
-		url, err := app.Model.URLS.GetByShort(shortCode)
+		url, err := app.Models.URLS.GetByShort(shortCode)
 		if err != nil {
 			switch {
 

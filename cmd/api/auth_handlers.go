@@ -41,7 +41,7 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = app.Model.Users.Insert(user)
+	err = app.Models.Users.Insert(user)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrDuplicateEmail):
@@ -52,6 +52,17 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		}
 		return
 	}
+
+	go func() {
+		data := map[string]interface{}{
+			"username": user.Username,
+		}
+
+		err = app.mailer.Send(user.Email, "user_welcome.tmpl", data)
+		if err != nil {
+			app.logResponse(r, err)
+		}
+	}()
 
 	err = app.writeJSON(w, http.StatusAccepted, envelope{"user": user})
 	if err != nil {
@@ -82,7 +93,7 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	user, err := app.Model.Users.GetByEmail(input.Email)
+	user, err := app.Models.Users.GetByEmail(input.Email)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -104,7 +115,7 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	token, err := app.Model.Tokens.New(user.ID, 24*time.Hour, data.ScopeAuthentication)
+	token, err := app.Models.Tokens.New(user.ID, 24*time.Hour, data.ScopeAuthentication)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -117,6 +128,129 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+func (app *application) changeEmailHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email string `json:"email"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	input.Email = strings.ToLower(input.Email)
+	v := validator.New()
+	data.ValidateEmail(v, input.Email)
+
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	user := app.getUserFromContext(r)
+
+	err = app.Models.Users.SetEmail(user.ID, input.Email)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"message": "Updated"})
+}
+
+func (app *application) changePassswordHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		NewPassword string `json:"password"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	v := validator.New()
+	data.ValidatePasswordPlaintext(v, input.NewPassword)
+
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	user := app.getUserFromContext(r)
+	err = user.Password.Set(input.NewPassword)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.Models.Users.SetPassword(user.ID, string(user.Password.Hash))
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.Models.Tokens.DeleteAllForUser(data.ScopeAuthentication, user.ID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, envelope{"message": "Updated"})
+}
+
+func (app *application) resetPasswordHandler(w http.ResponseWriter, r *http.Request) {
+
+	var input struct {
+		Email string `json:"email"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	input.Email = strings.ToLower(input.Email)
+	v := validator.New()
+	data.ValidateEmail(v, input.Email)
+
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	user, err := app.Models.Users.GetByEmail(input.Email)
+	if err != nil {
+		if errors.Is(err, data.ErrRecordNotFound) {
+			app.writeJSON(w, http.StatusOK, envelope{"message": "An email has been sent to your account with instructions"})
+		} else {
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	token, err := app.Models.Tokens.New(user.ID, 10*time.Minute, data.ScopeAuthentication)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	go func() {
+		data := map[string]interface{}{
+			"username": user.Username,
+			"token":    token,
+		}
+
+		err = app.mailer.Send(user.Email, "reset_password.tmpl", data)
+		if err != nil {
+			app.logResponse(r, err)
+		}
+	}()
+
+	app.writeJSON(w, http.StatusOK, envelope{"message": "An email has been sent to your account with instructions"})
+}
+
 func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request) {
 	tokenPlaintext := app.getAuthTokenPlaintextFromContext(r)
 
@@ -124,7 +258,7 @@ func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request
 		app.authenticationRequiredResponse(w, r)
 	}
 
-	err := app.Model.Tokens.DeleteOneForUser(tokenPlaintext)
+	err := app.Models.Tokens.DeleteOneForUser(tokenPlaintext)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -135,7 +269,7 @@ func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request
 func (app *application) registerPremiumHandler(w http.ResponseWriter, r *http.Request) {
 	user := app.getUserFromContext(r)
 	if user.Type != 2 {
-		err := app.Model.Users.SetUserType(user.ID, 2)
+		err := app.Models.Users.SetUserType(user.ID, 2)
 		if err != nil {
 			app.serverErrorResponse(w, r, err)
 			return

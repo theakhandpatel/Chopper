@@ -11,6 +11,7 @@ import (
 
 const (
 	ScopeAuthentication = "authentication"
+	ScopeReset          = "reset"
 )
 
 var EmptyToken = &Token{}

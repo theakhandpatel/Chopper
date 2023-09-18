@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"url_shortner/internal/data"
+	"url_shortner/internal/mailer"
 
 	"github.com/golang-migrate/migrate/v4"
 	sqlite3 "github.com/golang-migrate/migrate/v4/database/sqlite3"
@@ -30,12 +31,20 @@ type config struct {
 		dsn            string // Path to the SQLite database file
 		migrationsPath string
 	}
+	smtp struct {
+		host     string
+		port     int
+		username string
+		password string
+		sender   string
+	}
 }
 
 // application represents the main application structure.
 type application struct {
-	Model  data.Model // Data model for the application
+	Models data.Model // Data model for the application
 	config config     // Application configuration
+	mailer mailer.Mailer
 }
 
 func main() {
@@ -52,6 +61,12 @@ func main() {
 	flag.Float64Var(&cfg.dailyLimiter.authenticated, "dailyLimiter-id", 10.0, "Daily limit for Authenticated Users")
 	flag.StringVar(&cfg.database.migrationsPath, "migrations", "./migrations", "Relative Path to the migrations folder")
 
+	flag.StringVar(&cfg.smtp.host, "smtp-host", "smtp.mailtrap.io", "SMTP host")
+	flag.IntVar(&cfg.smtp.port, "smtp-port", 2525, "SMTP port")
+	flag.StringVar(&cfg.smtp.username, "smtp-username", "6cf67c5b09db70", "SMTP username")
+	flag.StringVar(&cfg.smtp.password, "smtp-password", "cd351309d5c4c4", "SMTP password")
+	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Chopper <chopper@theakhandpatel.me>", "SMTP sender")
+
 	flag.Parse()
 
 	// Initializing the database
@@ -61,8 +76,9 @@ func main() {
 	}
 
 	app := application{
-		Model:  data.NewModel(db),
+		Models: data.NewModel(db),
 		config: cfg,
+		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
 
 	// Starting the server

@@ -36,6 +36,8 @@ func (app *application) routes() http.Handler {
 	r.Post("/api/signout", app.requireAuthenticatedUser(app.logoutUserHandler))
 	r.Post("/api/premium", app.requireAuthenticatedUser(app.registerPremiumHandler))
 
+	r.Get("/qr/{shortCode}", app.rateLimit(app.requirePremiumUser(app.QRCodeHandler)))
+
 	r.Get("/{shortCode}", app.rateLimit(app.ExpandURLHandler))
 
 	return r

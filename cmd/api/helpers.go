@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
+
+	"github.com/skip2/go-qrcode"
 )
 
 // A generic map structure to package response.
@@ -102,4 +105,37 @@ func addHTTPPrefix(url string) string {
 		url = "http://" + url
 	}
 	return url
+}
+
+func getDeployedURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	hostURL := fmt.Sprintf("%s://%s/", scheme, r.Host)
+	return hostURL
+}
+
+func generateAndSaveQRCode(shortCode string, imagePath string) error {
+
+	// Generate the QR code
+	code, err := qrcode.New(shortCode, qrcode.Medium)
+	if err != nil {
+		return err
+	}
+
+	// Create and save the image file
+	file, err := os.Create(imagePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Write the QR code image to the file
+	err = code.Write(256, file)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

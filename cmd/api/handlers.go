@@ -2,7 +2,10 @@ package main
 
 import (
 	"errors"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 	"url_shortner/internal/data"
 	"url_shortner/internal/validator"
@@ -122,8 +125,8 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 		app.serverErrorResponse(w, r, data.ErrMaxCollision)
 		return
 	}
-
-	app.writeJSON(w, http.StatusCreated, envelope{"url": url})
+	hostURL := getDeployedURL(r)
+	app.writeJSON(w, http.StatusCreated, envelope{"url": url, "short_url": (hostURL + url.ShortCode)})
 }
 
 func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *http.Request, input *inputURL) {
@@ -169,8 +172,8 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 		app.serverErrorResponse(w, r, data.ErrMaxCollision)
 		return
 	}
-
-	app.writeJSON(w, http.StatusCreated, envelope{"url": url})
+	hostURL := getDeployedURL(r)
+	app.writeJSON(w, http.StatusCreated, envelope{"url": url, "short_url": (hostURL + url.ShortCode)})
 }
 
 func (app *application) EditShortURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +226,8 @@ func (app *application) EditShortURLHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	app.writeJSON(w, http.StatusAccepted, envelope{"url": url})
+	hostURL := getDeployedURL(r)
+	app.writeJSON(w, http.StatusAccepted, envelope{"url": url, "short_url": (hostURL + url.ShortCode)})
 }
 
 func (app *application) DeleteShortURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -243,7 +247,8 @@ func (app *application) DeleteShortURLHandler(w http.ResponseWriter, r *http.Req
 
 func (app *application) GetShortURLHandler(w http.ResponseWriter, r *http.Request) {
 	url := app.getURLFromContext(r)
-	app.writeJSON(w, http.StatusOK, envelope{"url": url})
+	hostURL := getDeployedURL(r)
+	app.writeJSON(w, http.StatusOK, envelope{"url": url, "short_url": (hostURL + url.ShortCode)})
 }
 
 // expanding short URLs.
@@ -302,6 +307,37 @@ func (app *application) AnalyticsHandler(w http.ResponseWriter, r *http.Request)
 		app.serverErrorResponse(w, r, err)
 		return
 	}
+	hostURL := getDeployedURL(r)
+	app.writeJSON(w, http.StatusOK, envelope{"short_url": (hostURL + url.ShortCode), "analytics": analytics})
+}
 
-	app.writeJSON(w, http.StatusOK, envelope{"short_url": url.ShortCode, "analytics": analytics})
+func (app *application) QRCodeHandler(w http.ResponseWriter, r *http.Request) {
+	shortCode := chi.URLParam(r, "shortCode")
+	imagePath := filepath.Join("./qrcodes", shortCode+".png")
+	_, err := os.Stat(imagePath)
+
+	if os.IsNotExist(err) {
+		// Generate and save the QR code image
+		err := generateAndSaveQRCode(getDeployedURL(r)+shortCode, imagePath)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+
+	file, err := os.Open(imagePath)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	defer file.Close()
+
+	_, err = io.Copy(w, file)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 }

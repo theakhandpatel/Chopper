@@ -23,7 +23,7 @@ func (app *application) routes() http.Handler {
 	r.Get("/", app.HealthCheckHandler)
 
 	r.Route("/api/short", func(sr chi.Router) {
-		sr.Get("/", app.requireAuthorizedUser(app.GetAllShortsHandler))
+		sr.Get("/", app.requireAuthenticatedUser(app.GetAllShortsHandler))
 		sr.Post("/", app.dailyLimiter(app.CreateShortURLHandler))
 		sr.Get("/{shortCode}", app.requireAuthorizedUser(app.GetShortURLHandler))
 		sr.Put("/{shortCode}", app.requirePremiumUser(app.EditShortURLHandler))

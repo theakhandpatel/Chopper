@@ -253,7 +253,14 @@ func (app *application) GetShortURLHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (app *application) GetAllShortsHandler(w http.ResponseWriter, r *http.Request) {
+	user := app.getUserFromContext(r)
 
+	urls, err := app.Models.URLS.GetAllForUser(user.ID)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	app.writeJSON(w, http.StatusOK, envelope{"urls": urls})
 }
 
 // expanding short URLs.

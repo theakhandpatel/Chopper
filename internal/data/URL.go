@@ -125,6 +125,31 @@ func (model *URLModel) GetByShort(shortCode string) (*URL, error) {
 	return url, nil
 }
 
+// GetAllForUser retrieves all urls by the user.
+func (model *URLModel) GetAllForUser(userID int64) ([]*URL, error) {
+	query := `
+		SELECT id, long_url, short_url,  redirect, user_id, created, expired FROM urls WHERE user_id = ?;
+	`
+	rows, err := model.DB.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var urls []*URL
+
+	for rows.Next() {
+		var url URL
+		err := rows.Scan(&url.ID, &url.LongForm, &url.ShortCode, &url.Redirect, &url.UserID, &url.Created, &url.Expired)
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, &url)
+	}
+
+	return urls, nil
+}
+
 func (model *URLModel) DeleteByShort(shortCode string) error {
 	tx, err := model.DB.Begin()
 	if err != nil {

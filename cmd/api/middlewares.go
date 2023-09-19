@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,6 +158,7 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				w.Header().Set("Connection", "close")
+				fmt.Printf("Stack Trace  %s", debug.Stack())
 				app.serverErrorResponse(w, r, fmt.Errorf("%s", err))
 			}
 		}()
@@ -289,7 +291,7 @@ func (app *application) requirePremiumUser(next http.HandlerFunc) http.HandlerFu
 		user := app.getUserFromContext(r)
 
 		if !user.IsPremium() {
-			app.authorizationRequiredResponse(w, r)
+			app.premiumRequiredResponse(w, r)
 			return
 		}
 		next.ServeHTTP(w, r)

@@ -19,6 +19,7 @@ type inputURL struct {
 	ShortURL string `json:"short"`
 	Redirect string `json:"redirect"`
 	UserID   int64  `json:"-"`
+	New      bool   `json:"new"`
 }
 
 // health check message.
@@ -70,28 +71,28 @@ func (app *application) CreateShortURLHandler(w http.ResponseWriter, r *http.Req
 func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r *http.Request, input *inputURL) {
 
 	var url *data.URL
+	user := app.getUserFromContext(r)
+
+	if !user.IsPremium() {
+		input.New = false
+	}
 
 	redirectType := http.StatusPermanentRedirect
 	if input.Redirect == "temporary" {
 		redirectType = http.StatusTemporaryRedirect
 	}
 	//If no custom code is required
-	if input.ShortURL == "" {
-
+	if input.ShortURL == "" && !input.New {
 		existingURL, err := app.Models.URLS.GetByLongURL(input.LongURL, redirectType, input.UserID)
-
 		if err != nil && err != data.ErrRecordNotFound {
 			app.serverErrorResponse(w, r, err)
 			return
 		}
-
 		if existingURL != nil {
-			if redirectType == existingURL.Redirect || input.Redirect == "" {
-				existingURL.Modified = time.Now()
-				app.Models.URLS.Update(existingURL)
-				app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
-				return
-			}
+			existingURL.Expired = time.Now().Add(24 * time.Hour)
+			app.Models.URLS.Update(existingURL)
+			app.writeJSON(w, http.StatusOK, envelope{"url": existingURL, "short_url": (getDeployedURL(r) + existingURL.ShortCode)})
+			return
 		}
 	}
 
@@ -100,8 +101,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 		maxTriesForInsertion = 1
 	}
 
-	url = data.NewURL(input.LongURL, input.ShortURL, redirectType, input.UserID)
-
+	url = data.NewURL(input.LongURL, input.ShortURL, redirectType, user)
 	urlInserted := false
 
 	for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
@@ -122,7 +122,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 	}
 
 	if !urlInserted {
-		app.serverErrorResponse(w, r, data.ErrMaxCollision)
+		app.createConflictResponse(w, r)
 		return
 	}
 	hostURL := getDeployedURL(r)
@@ -131,6 +131,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 
 func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *http.Request, input *inputURL) {
 	var url *data.URL
+	user := app.getUserFromContext(r)
 
 	// if the URL already exists in the database.
 	existingURL, err := app.Models.URLS.GetByLongURL(input.LongURL, http.StatusPermanentRedirect, input.UserID)
@@ -138,16 +139,16 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 		app.serverErrorResponse(w, r, err)
 		return
 	}
-
+	expiryTime := time.Now().Add(6 * time.Hour)
 	if existingURL != nil {
-		existingURL.Modified = time.Now()
+		existingURL.Expired = expiryTime
 		app.Models.URLS.Update(existingURL)
-		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL})
+		app.writeJSON(w, http.StatusOK, envelope{"url": existingURL, "short_url": (getDeployedURL(r) + existingURL.ShortCode)})
 		return
 	}
 
 	maxTriesForInsertion := 3
-	url = data.NewURL(input.LongURL, "", http.StatusPermanentRedirect, input.UserID)
+	url = data.NewURL(input.LongURL, "", http.StatusPermanentRedirect, user)
 
 	urlInserted := false
 
@@ -218,7 +219,7 @@ func (app *application) EditShortURLHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	url.Modified = time.Now()
+	url.Expired = time.Now()
 
 	err = app.Models.URLS.Update(url)
 	if err != nil {
@@ -251,11 +252,15 @@ func (app *application) GetShortURLHandler(w http.ResponseWriter, r *http.Reques
 	app.writeJSON(w, http.StatusOK, envelope{"url": url, "short_url": (hostURL + url.ShortCode)})
 }
 
+func (app *application) GetAllShortsHandler(w http.ResponseWriter, r *http.Request) {
+
+}
+
 // expanding short URLs.
 func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request) {
-	shortURL := chi.URLParam(r, "shortCode")
+	shortCode := chi.URLParam(r, "shortCode")
 
-	url, err := app.Models.URLS.GetByShort(shortURL)
+	url, err := app.Models.URLS.GetByShort(shortCode)
 	if err != nil {
 		switch {
 
@@ -273,10 +278,9 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	currentTime := time.Now()
-	expiryTime := url.Modified.Add(6 * time.Hour)
-	if expiryTime.Before(currentTime) {
+	if url.Expired.Before(time.Now()) {
 		app.expiredLinkResponse(w, r)
+		app.Models.URLS.DeleteByShort(shortCode)
 		return
 	}
 

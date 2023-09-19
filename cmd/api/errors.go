@@ -48,8 +48,8 @@ func (app *application) expiredLinkResponse(w http.ResponseWriter, r *http.Reque
 	app.errorResponse(w, r, http.StatusGone, message)
 }
 
-func (app *application) editConflictResponse(w http.ResponseWriter, r *http.Request) {
-	message := "unable to update the record due to an edit conflict, please try again"
+func (app *application) createConflictResponse(w http.ResponseWriter, r *http.Request) {
+	message := "unable to create the record due to a conflict, please try again with different value"
 	app.errorResponse(w, r, http.StatusConflict, message)
 }
 
@@ -76,5 +76,10 @@ func (app *application) authenticationRequiredResponse(w http.ResponseWriter, r 
 
 func (app *application) authorizationRequiredResponse(w http.ResponseWriter, r *http.Request) {
 	message := "You are not authorized to access this resource"
+	app.errorResponse(w, r, http.StatusUnauthorized, message)
+}
+
+func (app *application) premiumRequiredResponse(w http.ResponseWriter, r *http.Request) {
+	message := "You require premium to access this feature"
 	app.errorResponse(w, r, http.StatusUnauthorized, message)
 }

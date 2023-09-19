@@ -27,13 +27,13 @@ type URL struct {
 	Redirect  int
 	UserID    int64     `json:"-"`
 	Created   time.Time `json:"-"`
-	Modified  time.Time
+	Expired   time.Time
 }
 
 // NewURL creates a new URL instance with a shortened version of the provided long URL.
-func NewURL(longURL string, shortCode string, redirect int, userID int64) *URL {
+func NewURL(longURL string, shortCode string, redirect int, user *User) *URL {
 	if shortCode == "" {
-		if userID == AnonymousUser.ID {
+		if user.IsAnonymous() {
 			shortCode = utils.GetShortCode(8)
 		} else {
 			shortCode = utils.GetShortCode(6)
@@ -42,13 +42,22 @@ func NewURL(longURL string, shortCode string, redirect int, userID int64) *URL {
 	if redirect != http.StatusTemporaryRedirect {
 		redirect = http.StatusPermanentRedirect
 	}
+	var expiry time.Time
+	if user.IsPremium() {
+		expiry = time.Now().Add(24 * 30 * time.Hour)
+	} else if !user.IsAnonymous() {
+		expiry = time.Now().Add(24 * 7 * time.Hour)
+	} else {
+		expiry = time.Now().Add(12 * time.Hour)
+	}
+
 	return &URL{
 		LongForm:  longURL,
 		ShortCode: shortCode,
 		Redirect:  redirect,
 		Created:   time.Now(),
-		Modified:  time.Now(),
-		UserID:    int64(userID),
+		Expired:   expiry,
+		UserID:    user.ID,
 	}
 }
 
@@ -69,18 +78,17 @@ type URLModel struct {
 // Insert inserts a new URL record into the database.
 func (model *URLModel) Insert(url *URL) error {
 	query := `
-		INSERT INTO urls (long_url, short_url, redirect, user_id, created, modified) VALUES (?,?,?,?,?,?);
+		INSERT INTO urls (long_url, short_url, redirect, user_id, created, expired) VALUES (?,?,?,?,?,?);
 	`
 
-	res, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Created, url.Modified)
+	res, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Created, url.Expired)
 
 	if err != nil {
-		// Check for duplicate entry error and return a predefined error.
+		// Check for duplicate entry error
 		sqliteErr, isSQLError := err.(sqlite3.Error)
 		if isSQLError && sqliteErr.Code == sqlite3.ErrConstraint {
 			return ErrDuplicateEntry
 		}
-		// Use errors.Is to check for specific error type.
 		if errors.Is(err, sqlite3.ErrConstraint) {
 			return ErrDuplicateEntry
 		}
@@ -99,14 +107,14 @@ func (model *URLModel) Insert(url *URL) error {
 // GetByShort retrieves a URL record based on the short URL.
 func (model *URLModel) GetByShort(shortCode string) (*URL, error) {
 	query := `
-		SELECT id, long_url,  redirect, user_id, created, modified FROM urls WHERE short_url = ?;
+		SELECT id, long_url,  redirect, user_id, created, expired FROM urls WHERE short_url = ?;
 	`
 	row := model.DB.QueryRow(query, shortCode)
 
 	url := &URL{
 		ShortCode: shortCode,
 	}
-	err := row.Scan(&url.ID, &url.LongForm, &url.Redirect, &url.UserID, &url.Created, &url.Modified)
+	err := row.Scan(&url.ID, &url.LongForm, &url.Redirect, &url.UserID, &url.Created, &url.Expired)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound
@@ -122,7 +130,7 @@ func (model *URLModel) DeleteByShort(shortCode string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // Rollback the transaction if there's an error
+	defer tx.Rollback() // Rollback the transaction
 
 	query := `
 		DELETE FROM urls WHERE short_url = ?;
@@ -132,7 +140,7 @@ func (model *URLModel) DeleteByShort(shortCode string) error {
 		return err
 	}
 
-	// Commit the transaction to make the changes permanent
+	// Commit the transaction
 	err = tx.Commit()
 	if err != nil {
 		return err
@@ -145,11 +153,11 @@ func (model *URLModel) DeleteByShort(shortCode string) error {
 func (model *URLModel) Update(url *URL) error {
 	query := `
 		UPDATE urls
-		SET long_url = ?, short_url = ?, redirect = ?, user_id = ?, modified = ?
+		SET long_url = ?, short_url = ?, redirect = ?, user_id = ?, expired = ?
 		WHERE id = ?;
 	`
 
-	_, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Modified, url.ID)
+	_, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Expired, url.ID)
 	if err != nil {
 		return err
 	}
@@ -160,20 +168,19 @@ func (model *URLModel) Update(url *URL) error {
 // GetByLongURL retrieves a URL record based on the long URL.
 func (model *URLModel) GetByLongURL(longURL string, redirectType int, userID int64) (*URL, error) {
 	query := `
-		SELECT id, long_url, short_url, redirect, created, modified FROM urls WHERE long_url = ? AND redirect=? AND user_id = ?;
+		SELECT id, long_url, short_url, redirect, created, expired FROM urls WHERE long_url = ? AND redirect=? AND user_id = ?;
 	`
 	row := model.DB.QueryRow(query, longURL, redirectType, userID)
 
 	url := &URL{
 		UserID: userID,
 	}
-	err := row.Scan(&url.ID, &url.LongForm, &url.ShortCode, &url.Redirect, &url.Created, &url.Modified)
+	err := row.Scan(&url.ID, &url.LongForm, &url.ShortCode, &url.Redirect, &url.Created, &url.Expired)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound
 		}
 		return nil, err
 	}
-
 	return url, nil
 }

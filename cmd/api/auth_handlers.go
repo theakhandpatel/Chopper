@@ -155,7 +155,7 @@ func (app *application) changeEmailHandler(w http.ResponseWriter, r *http.Reques
 		app.serverErrorResponse(w, r, err)
 	}
 
-	app.writeJSON(w, http.StatusOK, envelope{"message": "Updated"})
+	app.writeJSON(w, http.StatusOK, envelope{"message": "Email change was successful"})
 }
 
 func (app *application) changePassswordHandler(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +196,7 @@ func (app *application) changePassswordHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	app.writeJSON(w, http.StatusOK, envelope{"message": "Updated"})
+	app.writeJSON(w, http.StatusOK, envelope{"message": "Password change was successful"})
 }
 
 func (app *application) resetPasswordHandler(w http.ResponseWriter, r *http.Request) {

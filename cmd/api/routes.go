@@ -22,14 +22,15 @@ func (app *application) routes() http.Handler {
 
 	r.Get("/", app.HealthCheckHandler)
 
-	r.Get("/api/stats/{shortCode}", app.requirePremiumUser(app.AnalyticsHandler))
-
 	r.Route("/api/short", func(sr chi.Router) {
+		sr.Get("/", app.requireAuthorizedUser(app.GetAllShortsHandler))
 		sr.Post("/", app.dailyLimiter(app.CreateShortURLHandler))
 		sr.Get("/{shortCode}", app.requireAuthorizedUser(app.GetShortURLHandler))
 		sr.Put("/{shortCode}", app.requirePremiumUser(app.EditShortURLHandler))
 		sr.Delete("/{shortCode}", app.requirePremiumUser(app.DeleteShortURLHandler))
 	})
+
+	r.Get("/api/stats/{shortCode}", app.requirePremiumUser(app.AnalyticsHandler))
 
 	r.Post("/api/signup", app.registerUserHandler)
 	r.Post("/api/signin", app.loginUserHandler)

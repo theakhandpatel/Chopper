@@ -5,6 +5,13 @@
 
 Chopper is a fast and efficient web application built with Go (Golang) that enables users to shorten long URLs into compact, easy-to-share short URLs. Whether you're sharing links on social media, embedding URLs in emails, or simply trying to manage long and complex URLs, this application provides a convenient solution for creating and expanding short URLs. 🔗
 
+## Deployed
+Access at [ch-op.onrender.com](https://ch-op.onrender.com/)
+
+## API Endpoints 📡
+
+Go to [API DOCS](https://ch-op.onrender.com/docs) 📚
+
 ## Features 🌟
 
 - **URL Shortening**: Convert lengthy URLs into shorter, more manageable versions. ✂️
@@ -29,9 +36,6 @@ Chopper is a fast and efficient web application built with Go (Golang) that enab
 - **Rate Limiting**: Token Bucket Algorithm ⏳
 - **Encoding**: Base(A-Za-z0.9_-) 🧮
 
-## API Endpoints 📡
-
-Go to [API DOCS](https://documenter.getpostman.com/view/9176353/2s9YC8vqzt) 📚
 
 # How to Run 🏃‍♂️
 

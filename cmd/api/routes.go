@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/cors"
 )
 
 // routes configures the application's routing using Chi router.
@@ -13,6 +14,14 @@ func (app *application) routes() http.Handler {
 	r := chi.NewRouter()
 
 	// Apply middleware for logging and error recovery
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"https://*", "http://*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: false,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	}))
 	r.Use(app.metrics)
 	r.Use(middleware.Logger)
 	r.Use(app.recoverPanic)

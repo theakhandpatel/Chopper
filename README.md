@@ -10,7 +10,7 @@ Access at [ch-op.onrender.com](https://ch-op.onrender.com/)
 
 ## API Endpoints 📡
 
-Go to [API DOCS](https://ch-op.onrender.com/docs) 📚
+Go to [API DOCS](https://documenter.getpostman.com/view/9176353/2s9YCAQVGM) 📚
 
 ## Features 🌟
 

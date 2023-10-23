@@ -20,6 +20,7 @@ type inputURL struct {
 	Redirect string `json:"redirect"`
 	UserID   int64  `json:"-"`
 	New      bool   `json:"new"`
+	Once     bool   `json:"once"` // Once is used to specify that this short url will be deleted as soon as it is used once.
 }
 
 // health check message.
@@ -75,6 +76,11 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 
 	if !user.IsPremium() {
 		input.New = false
+		input.Once = false
+	}
+
+	if input.Once {
+		input.New = true
 	}
 
 	redirectType := http.StatusPermanentRedirect
@@ -96,7 +102,7 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 		}
 	}
 
-	url = data.NewURL(input.LongURL, input.ShortURL, redirectType, user)
+	url = data.NewURL(input.LongURL, input.ShortURL, redirectType, user, input.Once)
 
 	err := app.Models.URLS.Insert(url)
 	if err != nil {
@@ -132,7 +138,7 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	url = data.NewURL(input.LongURL, "", http.StatusPermanentRedirect, user)
+	url = data.NewURL(input.LongURL, "", http.StatusPermanentRedirect, user, false)
 
 	err = app.Models.URLS.Insert(url)
 	if err != nil {
@@ -252,12 +258,6 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	longURL := url.LongForm
-	if longURL == "" {
-		app.NotFoundResponse(w, r)
-		return
-	}
-
 	if url.Expired.Before(time.Now()) {
 		app.expiredLinkResponse(w, r)
 		app.Models.URLS.DeleteByShort(shortCode)
@@ -279,7 +279,16 @@ func (app *application) ExpandURLHandler(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	http.Redirect(w, r, longURL, url.Redirect)
+	if url.Once {
+		url.Expired = time.Now()
+		err = app.Models.URLS.Update(url)
+		if err != nil {
+			app.logResponse(r, err)
+		}
+	}
+
+	http.Redirect(w, r, url.LongForm, url.Redirect)
+
 }
 
 // analytics for a given short URL.

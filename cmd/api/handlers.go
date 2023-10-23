@@ -96,35 +96,20 @@ func (app *application) AuthenticatedShortenURLHandler(w http.ResponseWriter, r 
 		}
 	}
 
-	maxTriesForInsertion := 3
-	if input.ShortURL != "" {
-		maxTriesForInsertion = 1
-	}
-
 	url = data.NewURL(input.LongURL, input.ShortURL, redirectType, user)
-	urlInserted := false
 
-	for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
-		err := app.Models.URLS.Insert(url)
-		if err == nil {
-			urlInserted = true
-			break
-		}
-
-		if err != data.ErrDuplicateEntry {
+	err := app.Models.URLS.Insert(url)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrDuplicateEntry):
+			app.createConflictResponse(w, r)
+			return
+		default:
 			app.serverErrorResponse(w, r, err)
 			return
 		}
-
-		if err == data.ErrDuplicateEntry {
-			url.Reshorten() //  modify the short code
-		}
 	}
 
-	if !urlInserted {
-		app.createConflictResponse(w, r)
-		return
-	}
 	hostURL := getDeployedURL(r)
 	app.writeJSON(w, http.StatusCreated, envelope{"url": url, "short_url": (hostURL + url.ShortCode)})
 }
@@ -147,32 +132,20 @@ func (app *application) AnonymousShortenURLHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	maxTriesForInsertion := 3
 	url = data.NewURL(input.LongURL, "", http.StatusPermanentRedirect, user)
 
-	urlInserted := false
-
-	for retriesLeft := maxTriesForInsertion; retriesLeft > 0; retriesLeft-- {
-		err := app.Models.URLS.Insert(url)
-		if err == nil {
-			urlInserted = true
-			break
-		}
-
-		if err != data.ErrDuplicateEntry {
+	err = app.Models.URLS.Insert(url)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrDuplicateEntry):
+			app.createConflictResponse(w, r)
+			return
+		default:
 			app.serverErrorResponse(w, r, err)
 			return
 		}
-
-		if err == data.ErrDuplicateEntry {
-			url.Reshorten() //  modify the short code
-		}
 	}
 
-	if !urlInserted {
-		app.serverErrorResponse(w, r, data.ErrMaxCollision)
-		return
-	}
 	hostURL := getDeployedURL(r)
 	app.writeJSON(w, http.StatusCreated, envelope{"url": url, "short_url": (hostURL + url.ShortCode)})
 }

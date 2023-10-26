@@ -28,10 +28,11 @@ type URL struct {
 	UserID    int64     `json:"-"`
 	Created   time.Time `json:"-"`
 	Expired   time.Time
+	Once      bool `json:"once"` // Once is used to specify that this short url will be deleted as soon as it is used once.
 }
 
 // NewURL creates a new URL instance with a shortened version of the provided long URL.
-func NewURL(longURL string, shortCode string, redirect int, user *User) *URL {
+func NewURL(longURL string, shortCode string, redirect int, user *User, once bool) *URL {
 	if shortCode == "" {
 		if user.IsAnonymous() {
 			shortCode = utils.GetShortCode(8)
@@ -58,6 +59,7 @@ func NewURL(longURL string, shortCode string, redirect int, user *User) *URL {
 		Created:   time.Now(),
 		Expired:   expiry,
 		UserID:    user.ID,
+		Once:      once,
 	}
 }
 
@@ -78,10 +80,10 @@ type URLModel struct {
 // Insert inserts a new URL record into the database.
 func (model *URLModel) Insert(url *URL) error {
 	query := `
-		INSERT INTO urls (long_url, short_url, redirect, user_id, created, expired) VALUES (?,?,?,?,?,?);
+		INSERT INTO urls (long_url, short_url, redirect, user_id, created, expired, once) VALUES (?,?,?,?,?,?,?);
 	`
 
-	res, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Created, url.Expired)
+	res, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Created, url.Expired, url.Once)
 
 	if err != nil {
 		// Check for duplicate entry error
@@ -107,14 +109,14 @@ func (model *URLModel) Insert(url *URL) error {
 // GetByShort retrieves a URL record based on the short URL.
 func (model *URLModel) GetByShort(shortCode string) (*URL, error) {
 	query := `
-		SELECT id, long_url,  redirect, user_id, created, expired FROM urls WHERE short_url = ?;
+		SELECT id, long_url,  redirect, user_id, created, expired, once FROM urls WHERE short_url = ?;
 	`
 	row := model.DB.QueryRow(query, shortCode)
 
 	url := &URL{
 		ShortCode: shortCode,
 	}
-	err := row.Scan(&url.ID, &url.LongForm, &url.Redirect, &url.UserID, &url.Created, &url.Expired)
+	err := row.Scan(&url.ID, &url.LongForm, &url.Redirect, &url.UserID, &url.Created, &url.Expired, &url.Once)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound
@@ -128,7 +130,7 @@ func (model *URLModel) GetByShort(shortCode string) (*URL, error) {
 // GetAllForUser retrieves all urls by the user.
 func (model *URLModel) GetAllForUser(userID int64) ([]*URL, error) {
 	query := `
-		SELECT id, long_url, short_url,  redirect, user_id, created, expired FROM urls WHERE user_id = ?;
+		SELECT id, long_url, short_url,  redirect, user_id, created, expired, once FROM urls WHERE user_id = ?;
 	`
 	rows, err := model.DB.Query(query, userID)
 	if err != nil {
@@ -140,7 +142,7 @@ func (model *URLModel) GetAllForUser(userID int64) ([]*URL, error) {
 
 	for rows.Next() {
 		var url URL
-		err := rows.Scan(&url.ID, &url.LongForm, &url.ShortCode, &url.Redirect, &url.UserID, &url.Created, &url.Expired)
+		err := rows.Scan(&url.ID, &url.LongForm, &url.ShortCode, &url.Redirect, &url.UserID, &url.Created, &url.Expired, &url.Once)
 		if err != nil {
 			return nil, err
 		}
@@ -178,11 +180,11 @@ func (model *URLModel) DeleteByShort(shortCode string) error {
 func (model *URLModel) Update(url *URL) error {
 	query := `
 		UPDATE urls
-		SET long_url = ?, short_url = ?, redirect = ?, user_id = ?, expired = ?
+		SET long_url = ?, short_url = ?, redirect = ?, user_id = ?, expired = ?, once = ?
 		WHERE id = ?;
 	`
 
-	_, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Expired, url.ID)
+	_, err := model.DB.Exec(query, url.LongForm, url.ShortCode, url.Redirect, url.UserID, url.Expired, url.Once, url.ID)
 	if err != nil {
 		return err
 	}
@@ -193,14 +195,14 @@ func (model *URLModel) Update(url *URL) error {
 // GetByLongURL retrieves a URL record based on the long URL.
 func (model *URLModel) GetByLongURL(longURL string, redirectType int, userID int64) (*URL, error) {
 	query := `
-		SELECT id, long_url, short_url, redirect, created, expired FROM urls WHERE long_url = ? AND redirect=? AND user_id = ?;
+		SELECT id, long_url, short_url, redirect, created, expired, once FROM urls WHERE long_url = ? AND redirect=? AND user_id = ?;
 	`
 	row := model.DB.QueryRow(query, longURL, redirectType, userID)
 
 	url := &URL{
 		UserID: userID,
 	}
-	err := row.Scan(&url.ID, &url.LongForm, &url.ShortCode, &url.Redirect, &url.Created, &url.Expired)
+	err := row.Scan(&url.ID, &url.LongForm, &url.ShortCode, &url.Redirect, &url.Created, &url.Expired, &url.Once)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRecordNotFound
